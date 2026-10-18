@@ -45,6 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var wanted = false
     /// Set when you open the line on purpose, so it stays up while empty.
     private var keepOpen = false
+    /// Opened on purpose with the shortcut or the menu, which counts over a
+    /// full screen app too, until the line tucks away.
+    private var openedOnPurpose = false
 
     // What brings the line down, from the menu bar's "Bring the line down".
     // Out of the box, the first two are on and the third off.
@@ -104,6 +107,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didActivateApplicationNotification] {
             workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
+                    // Opened on purpose counts for the Space it was opened on.
+                    if name == NSWorkspace.activeSpaceDidChangeNotification { self?.openedOnPurpose = false }
                     self?.refresh()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self?.refresh() }
                 }
@@ -343,10 +348,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Decides whether the panel is ordered in at all: something to show,
-    /// and no full screen app on that screen.
+    /// and no full screen app on that screen unless you asked for the line.
     private func refresh() {
-        let blocked = panel.screen.map(FullScreen.blocksLine(on:))
-            ?? LinePanel.screenUnderPointer().map(FullScreen.blocksLine(on:)) ?? false
+        let blocked = !openedOnPurpose && (panel.screen.map(FullScreen.blocksLine(on:))
+            ?? LinePanel.screenUnderPointer().map(FullScreen.blocksLine(on:)) ?? false)
         if wanted && !blocked {
             present()
         } else {
@@ -404,20 +409,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             pinned = false
             peekUntil = .distantPast
             panel.ignoresMouseEvents = true
+            // Opened on purpose lasts until the line tucks away, however that
+            // happens: an empty line then goes, as with the shortcut, and over
+            // a full screen app the line goes too.
+            if keepOpen || openedOnPurpose {
+                keepOpen = false
+                openedOnPurpose = false
+                if line.liveCount == 0 { wanted = false }
+                refresh()
+            }
         }
     }
 
     @objc private func toggle() {
         if isRevealed {
             setRevealed(false)
-            if line.liveCount == 0 {
-                keepOpen = false
-                wanted = false
-                refresh()
-            }
         } else {
             keepOpen = true
             wanted = true
+            openedOnPurpose = true
             panel.placeOnScreen()
             updateCapacity()
             refresh()
@@ -490,8 +500,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // Resting in the menu bar brings the line down on that screen.
             // Pushing against the top edge is part of it, and it also works
             // when another display sits above and the pointer never stops.
-            if Self.opensFromMenuBar, let screen = screenUnderPointer, inMenuBar, !menuBarSuppressed,
-               !FullScreen.blocksLine(on: screen) {
+            // An empty line stays up there: only the shortcut and the menu
+            // bring it down on purpose.
+            if line.liveCount > 0, Self.opensFromMenuBar, let screen = screenUnderPointer,
+               inMenuBar, !menuBarSuppressed, !FullScreen.blocksLine(on: screen) {
                 let since = hotZoneSince ?? now
                 hotZoneSince = since
                 if now.timeIntervalSince(since) >= Self.revealDelay {
@@ -617,46 +629,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// The shirt fills in while copied images are hung, so it shows at a
     /// glance that the clipboard is being watched. It is dimmed while the
     /// line is empty, so resting in the menu bar and seeing nothing come down
-    /// does not look broken. It always carries a count, a dimmed 0 included.
+    /// does not look broken.
     private func updateStatusIcon() {
         let on = ClipboardWatcher.isEnabled
         let count = line.liveCount
         let description = on ? L("Tendedero, hanging copied images") : "Tendedero"
         let state = count == 0 ? L("The line is empty") : String(format: L("%d on the line"), count)
-        guard let symbol = NSImage(systemSymbolName: on ? "tshirt.fill" : "tshirt",
-                                   accessibilityDescription: "\(description), \(state)") else { return }
-        let image = Self.badged(symbol, count: count)
-        image.isTemplate = true
+        let image = NSImage(systemSymbolName: on ? "tshirt.fill" : "tshirt",
+                            accessibilityDescription: "\(description), \(state)")
+        image?.isTemplate = true
         statusItem.button?.image = image
         statusItem.button?.appearsDisabled = count == 0
         statusItem.button?.toolTip = "\(description)\n\(state)"
-    }
-
-    /// The shirt with a small count in its lower right corner, cut out of
-    /// the shirt so it reads on top of it.
-    private static func badged(_ symbol: NSImage, count: Int) -> NSImage {
-        let label = NSAttributedString(string: count > 9 ? "9+" : "\(count)", attributes: [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: count > 9 ? 7 : 8, weight: .bold),
-            .foregroundColor: NSColor.black,
-        ])
-        let text = label.size()
-        let size = symbol.size
-        let badge = NSRect(x: size.width - max(text.height, text.width + 2), y: 0,
-                           width: max(text.height, text.width + 2), height: text.height)
-        let image = NSImage(size: size, flipped: false) { _ in
-            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
-            symbol.draw(in: NSRect(origin: .zero, size: size))
-            ctx.setBlendMode(.destinationOut)
-            NSBezierPath(roundedRect: badge.insetBy(dx: -1.5, dy: -1.5),
-                         xRadius: badge.height / 2 + 1.5, yRadius: badge.height / 2 + 1.5).fill()
-            ctx.setBlendMode(.normal)
-            NSBezierPath(roundedRect: badge, xRadius: badge.height / 2, yRadius: badge.height / 2).fill()
-            ctx.setBlendMode(.destinationOut)
-            label.draw(at: NSPoint(x: badge.midX - text.width / 2, y: badge.minY))
-            return true
-        }
-        image.accessibilityDescription = symbol.accessibilityDescription
-        return image
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
