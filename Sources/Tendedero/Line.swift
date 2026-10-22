@@ -10,13 +10,15 @@ struct Pegged: Identifiable, Equatable {
     let id = UUID()
     let url: URL
     var thumb: NSImage
+    var isFileReference = false
+    var isTextNote: Bool { !isFileReference && isNote(url) }
     /// Every photo hangs a little crooked, like on a real line.
     let tilt = Double.random(in: -2.5...2.5)
     var falling = false
     /// Still flying in from where it was captured; the card waits hidden.
     var flying = false
     /// A screen recording rather than a screenshot.
-    var isRecording: Bool { Tendedero.isRecording(url) }
+    var isRecording: Bool { !isFileReference && Tendedero.isRecording(url) }
 
     static func == (a: Pegged, b: Pegged) -> Bool {
         a.id == b.id && a.falling == b.falling && a.flying == b.flying && a.thumb === b.thumb
@@ -67,6 +69,19 @@ final class Line: ObservableObject {
     var liveCount: Int { items.filter { !$0.falling }.count }
 
     private let storeKey = "pegged"
+    private var darkCards = false
+
+    func updateAppearance(dark: Bool) {
+        guard darkCards != dark else { return }
+        darkCards = dark
+        reloadThumbnails()
+    }
+
+    private func thumbnail(_ url: URL, reference: Bool) -> NSImage? {
+        if reference { return makeFileCard(url, dark: darkCards) }
+        if isNote(url) { return makeNoteCard(url, scale: min(1, CGFloat(Int(320 * Layout.size.scale)) / 1040), dark: darkCards) }
+        return makeThumbnail(url)
+    }
 
     init() {
         restore()
@@ -76,10 +91,10 @@ final class Line: ObservableObject {
     // MARK: Hanging and dropping
 
     @discardableResult
-    func hang(_ url: URL, quietly: Bool = false, flying: Bool = false) -> UUID? {
+    func hang(_ url: URL, quietly: Bool = false, flying: Bool = false, fileReference: Bool = false) -> UUID? {
         guard !items.contains(where: { $0.url == url && !$0.falling }),
-              let thumb = makeThumbnail(url) else { return nil }
-        var item = Pegged(url: url, thumb: thumb)
+              let thumb = thumbnail(url, reference: fileReference) else { return nil }
+        var item = Pegged(url: url, thumb: thumb, isFileReference: fileReference)
         item.flying = flying
         items.append(item)
         scroll = 0
@@ -155,14 +170,14 @@ final class Line: ObservableObject {
 
     func copy(_ id: UUID) {
         guard let item = items.first(where: { $0.id == id }) else { return }
-        let entry = NSPasteboardItem()
-        if isNote(item.url) {
-            if let text = try? String(contentsOf: item.url, encoding: .utf8) { entry.setString(text, forType: .string) }
-        } else if !item.isRecording, let png = pngData(item.url) {
-            // A recording is copied as the file, which apps paste as the video.
+        guard let entry = try? clipboardTransferItem(url: item.url, textNote: item.isTextNote) else {
+            NSSound.beep()
+            return
+        }
+        if !item.isTextNote, !item.isFileReference, !item.isRecording, let png = pngData(item.url) {
             entry.setData(png, forType: .png)
         }
-        entry.setString(item.url.absoluteString, forType: .fileURL)
+        entry.setString("1", forType: ClipboardWatcher.ownCopyType)
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.writeObjects([entry])
@@ -206,7 +221,7 @@ final class Line: ObservableObject {
     /// Files anywhere else, like the Desktop, stay where they are.
     func isInInbox(_ id: UUID) -> Bool {
         guard let item = items.first(where: { $0.id == id }) else { return false }
-        return item.url.standardizedFileURL.path.hasPrefix(Inbox.folder.standardizedFileURL.path + "/")
+        return !item.isFileReference && item.url.standardizedFileURL.path.hasPrefix(Inbox.folder.standardizedFileURL.path + "/")
     }
 
     /// The corner cross and "Take down" both end up here.
@@ -268,7 +283,7 @@ final class Line: ObservableObject {
     /// not edit video, so a recording opens in the trimming editor instead.
     func markup(_ id: UUID) {
         guard let item = items.first(where: { $0.id == id }) else { return }
-        if isNote(item.url) {
+        if item.isTextNote || item.isFileReference {
             // A note has nothing to mark up: it opens in the text editor instead.
             NSWorkspace.shared.open(item.url)
         } else if item.isRecording {
@@ -281,7 +296,7 @@ final class Line: ObservableObject {
     /// After editing, the photo on the line shows the new version.
     func reloadThumbnail(for url: URL) {
         guard let i = items.firstIndex(where: { $0.url == url && !$0.falling }),
-              let thumb = makeThumbnail(url) else { return }
+              let thumb = thumbnail(url, reference: items[i].isFileReference) else { return }
         items[i].thumb = thumb
     }
 
@@ -295,7 +310,7 @@ final class Line: ObservableObject {
     /// After a change of size, every photo is redrawn sharp at the new one.
     func reloadThumbnails() {
         for i in items.indices where !items[i].falling {
-            if let thumb = makeThumbnail(items[i].url) { items[i].thumb = thumb }
+            if let thumb = thumbnail(items[i].url, reference: items[i].isFileReference) { items[i].thumb = thumb }
         }
     }
 
@@ -321,6 +336,7 @@ final class Line: ObservableObject {
     private func save() {
         let paths = items.filter { !$0.falling }.map(\.url.path)
         UserDefaults.standard.set(paths, forKey: storeKey)
+        UserDefaults.standard.set(items.filter { !$0.falling && $0.isFileReference }.map(\.url.path), forKey: "peggedFileReferences")
     }
 
     /// Everything comes back as it was. This runs before the line knows its
@@ -328,10 +344,11 @@ final class Line: ObservableObject {
     /// `hang` would let photos fall off a wide screen's line at every launch.
     private func restore() {
         let paths = UserDefaults.standard.stringArray(forKey: storeKey) ?? []
+        let references = Set(UserDefaults.standard.stringArray(forKey: "peggedFileReferences") ?? [])
         for path in paths where FileManager.default.fileExists(atPath: path) {
             let url = URL(fileURLWithPath: path)
-            guard !items.contains(where: { $0.url == url }), let thumb = makeThumbnail(url) else { continue }
-            items.append(Pegged(url: url, thumb: thumb))
+            guard !items.contains(where: { $0.url == url }), let thumb = thumbnail(url, reference: references.contains(path)) else { continue }
+            items.append(Pegged(url: url, thumb: thumb, isFileReference: references.contains(path)))
         }
     }
 
@@ -385,7 +402,7 @@ private func firstFrame(_ url: URL, maxPixels: Int) -> NSImage? {
 
 /// Draws the text on a paper card, wrapped and cut off with an ellipsis
 /// when it runs past the bottom.
-func makeNoteCard(_ url: URL, scale: CGFloat = 1) -> NSImage? {
+func makeNoteCard(_ url: URL, scale: CGFloat = 1, dark: Bool = false) -> NSImage? {
     guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
     let text = String(decoding: data.prefix(4000), as: UTF8.self)
         .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -396,7 +413,8 @@ func makeNoteCard(_ url: URL, scale: CGFloat = 1) -> NSImage? {
           let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = context
-    NSColor(srgbRed: 0.995, green: 0.985, blue: 0.95, alpha: 1).setFill()
+    (dark ? NSColor(srgbRed: 0.16, green: 0.17, blue: 0.19, alpha: 1)
+          : NSColor(srgbRed: 0.995, green: 0.985, blue: 0.95, alpha: 1)).setFill()
     NSRect(x: 0, y: 0, width: width, height: height).fill()
 
     let style = NSMutableParagraphStyle()
@@ -404,7 +422,7 @@ func makeNoteCard(_ url: URL, scale: CGFloat = 1) -> NSImage? {
     style.lineSpacing = 6 * scale
     let attributes: [NSAttributedString.Key: Any] = [
         .font: NSFont.systemFont(ofSize: 72 * scale, weight: .medium),
-        .foregroundColor: NSColor(white: 0.13, alpha: 1),
+        .foregroundColor: NSColor(white: dark ? 0.92 : 0.13, alpha: 1),
         .paragraphStyle: style,
     ]
     let box = NSRect(x: pad, y: pad, width: CGFloat(width) - pad * 2, height: CGFloat(height) - pad * 2)
@@ -415,4 +433,25 @@ func makeNoteCard(_ url: URL, scale: CGFloat = 1) -> NSImage? {
     let image = NSImage(size: NSSize(width: width, height: height))
     image.addRepresentation(rep)
     return image
+}
+
+/// File references keep their identity, including .txt files and folders.
+func makeFileCard(_ url: URL, dark: Bool) -> NSImage {
+    let size = NSSize(width: 320, height: 246)
+    let icon = NSWorkspace.shared.icon(forFile: url.path)
+    return NSImage(size: size, flipped: false) { rect in
+        (dark ? NSColor(white: 0.17, alpha: 1) : NSColor(white: 0.96, alpha: 1)).setFill()
+        rect.fill()
+        icon.draw(in: NSRect(x: 112, y: 112, width: 96, height: 96))
+        let style = NSMutableParagraphStyle()
+        style.alignment = .center
+        style.lineBreakMode = .byTruncatingMiddle
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 22, weight: .medium),
+            .foregroundColor: NSColor(white: dark ? 0.92 : 0.13, alpha: 1),
+            .paragraphStyle: style,
+        ]
+        (url.lastPathComponent as NSString).draw(in: NSRect(x: 16, y: 44, width: 288, height: 54), withAttributes: attributes)
+        return true
+    }
 }

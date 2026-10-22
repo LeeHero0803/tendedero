@@ -29,6 +29,8 @@ struct GrabArea: NSViewRepresentable {
         let line = line
         let isRecording = item.isRecording
         view.url = item.url
+        view.isTextNote = item.isTextNote
+        view.copyOnly = item.isTextNote || item.isFileReference
         view.dragImage = item.thumb
         view.onClick = { line.copy(id) }
         view.onDoubleClick = { line.open(id) }
@@ -50,7 +52,7 @@ struct GrabArea: NSViewRepresentable {
             menu.addItem(ClosureMenuItem(L("Copy")) { line.copy(id) })
             menu.addItem(ClosureMenuItem(L("Open")) { line.open(id) })
             menu.addItem(ClosureMenuItem(L("Quick Look")) { line.quickLook(id) })
-            if !isRecording {
+            if !isRecording && !item.isFileReference {
                 menu.addItem(ClosureMenuItem(L("Markup")) { line.markup(id) })
             }
             menu.addItem(ClosureMenuItem(L("Show in Finder")) { line.reveal(id) })
@@ -82,6 +84,8 @@ final class GrabView: NSView, NSDraggingSource {
     static var isShowingMenu = false
 
     var url: URL?
+    var isTextNote = false
+    var copyOnly = false
     var dragImage: NSImage?
     var onClick: () -> Void = {}
     var onDoubleClick: () -> Void = {}
@@ -164,7 +168,13 @@ final class GrabView: NSView, NSDraggingSource {
         startedDrag = true
         endPress()
 
-        let item = NSDraggingItem(pasteboardWriter: url as NSURL)
+        guard let writer = try? clipboardTransferItem(url: url, textNote: isTextNote) else {
+            startedDrag = false
+            downPoint = nil
+            NSSound.beep()
+            return
+        }
+        let item = NSDraggingItem(pasteboardWriter: writer)
         item.setDraggingFrame(imageFrame(), contents: dragImage)
         let session = beginDraggingSession(with: [item], event: event, source: self)
         // Released where nothing accepts it: it flies back to the line.
@@ -193,7 +203,8 @@ final class GrabView: NSView, NSDraggingSource {
                          sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
         // Apps pick copy. Finder picks move, so a folder or the Desktop keeps
         // the file. Delete is what lets the Dock's Trash accept it.
-        context == .outsideApplication ? [.copy, .move, .delete] : []
+        guard context == .outsideApplication else { return [] }
+        return copyOnly ? .copy : [.copy, .move, .delete]
     }
 
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {

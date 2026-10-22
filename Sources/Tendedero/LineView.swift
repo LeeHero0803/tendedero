@@ -54,6 +54,7 @@ enum Layout {
 }
 
 struct LineView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject var line: Line
 
     var body: some View {
@@ -87,6 +88,8 @@ struct LineView: View {
             .animation(line.revealed ? .spring(response: 0.42, dampingFraction: 0.82)
                                      : .easeIn(duration: 0.22), value: line.revealed)
         }
+        .onAppear { line.updateAppearance(dark: colorScheme == .dark) }
+        .onChange(of: colorScheme) { _, scheme in line.updateAppearance(dark: scheme == .dark) }
         .onPreferenceChange(HitRectsKey.self) { rects in
             line.hitRects = rects
         }

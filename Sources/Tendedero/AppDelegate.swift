@@ -73,7 +73,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if Inbox.isEnabled { Inbox.apply() }
         restoreSettingsOnTermination()
         startWatcher()
-        clipboardWatcher = ClipboardWatcher { [weak self] url in self?.hangCapture(url) }
+        clipboardWatcher = ClipboardWatcher(onImage: { [weak self] url in self?.hangCapture(url) }, onFiles: { [weak self] urls in
+            guard let self, !urls.isEmpty else { return }
+            self.comeDown(on: nil)
+            for url in urls { self.line.hang(url, fileReference: true) }
+            self.itemsChanged()
+        })
         if ClipboardWatcher.isWatching { clipboardWatcher.start() }
 
         registerShortcut()
@@ -626,7 +631,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// glance that the clipboard is being watched.
     private func updateStatusIcon() {
         let on = ClipboardWatcher.isWatching
-        let description = ClipboardWatcher.isEnabled ? L("Tendedero, hanging copied images")
+        let description = ClipboardWatcher.filesEnabled ? L("Tendedero, hanging copied files")
+            : ClipboardWatcher.isEnabled ? L("Tendedero, hanging copied images")
             : on ? L("Tendedero, hanging copied text") : "Tendedero"
         let image = NSImage(systemSymbolName: on ? "tshirt.fill" : "tshirt", accessibilityDescription: description)
         image?.isTemplate = true
@@ -672,6 +678,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         clipText.state = ClipboardWatcher.textEnabled ? .on : .off
         clipText.toolTip = L("Text you copy hangs as a note card")
         menu.addItem(clipText)
+
+        let clipFiles = ClosureMenuItem(L("Hang copied files")) { [weak self] in
+            ClipboardWatcher.filesEnabled.toggle()
+            self?.updateClipboardWatcher()
+        }
+        clipFiles.state = ClipboardWatcher.filesEnabled ? .on : .off
+        clipFiles.toolTip = L("Files and folders you copy hang as references")
+        menu.addItem(clipFiles)
 
         let bringDown = NSMenuItem(title: L("Bring the line down"), action: nil, keyEquivalent: "")
         let options = NSMenu()
