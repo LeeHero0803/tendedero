@@ -1,3 +1,50 @@
+# Tendedero · 通用剪贴板扩展
+
+本分支 `feature/universal-clipboard` 基于 [Anubhav-Rai 的文字便签分支](https://github.com/Anubhav-Rai/tendedero/tree/feature/copied-text)，在原有截图晾衣绳上增加文件引用、纯文本传输修复和卡片样式改进。原项目：[alejandrobujan/tendedero](https://github.com/alejandrobujan/tendedero)。这是非官方源码扩展，目前未发布本分支的安装包。
+
+## 本分支的更新
+
+| 功能 | 行为 |
+| --- | --- |
+| 纯文本传输 | 点击或拖出文字便签时仅提供纯文本，不再把内部 `.txt` 存储文件作为附件；保留原文换行、空格和 Unicode。 |
+| 文件与文件夹 | 新增「挂起复制的文件 / Hang copied files」开关，支持 Finder 多选，每个文件独立成卡；真正的 `.txt` 文件仍按文件处理。 |
+| 文件内容预览 | 通过系统 Quick Look 异步请求图片、视频和支持的文档缩略图，保留文件名；不支持的格式及文件夹使用系统图标。 |
+| 主题与排版 | 文字和文件卡片跟随深浅色主题，已有卡片同步更新；便签带淡横线，文字块及文件预览与文件名整体垂直居中。 |
+| 类型识别 | 图片保留细金属夹，文字夹增加双横刻纹，文件夹稍宽并带小凹框；保留原来的金属、玻璃边框和摆动风格。 |
+| 生命周期 | 文件引用类型随记录保存；忽略应用自身复制，保留私密剪贴板过滤；卡片移除后取消未完成的预览请求。 |
+
+### 使用与构建
+
+需要 macOS 14+ 和可用的 Swift/macOS 开发工具链。先退出正在运行的旧版：
+
+```sh
+git clone -b feature/universal-clipboard https://github.com/LeeHero0803/tendedero.git
+cd tendedero
+scripts/test-clipboard.sh
+scripts/build-app.sh
+open build/Tendedero.app
+```
+
+在菜单栏按需开启「挂起复制的文字」「挂起复制的文件」和图片监听。测试正常后，将 `build/Tendedero.app` 替换到「应用程序」目录。
+
+**文件卡片保存的是引用，不是备份。** 拖出文件卡片默认复制，原文件保留；移除卡片或容量淘汰不会删除引用的原文件。右键明确选择「Move to Trash」仍会删除原文件。源文件移动或删除后，引用会失效并被清理。原有截图卡片仍遵循上游的拖放和清理行为。
+
+部分网页输入框可能拒绝文本拖放；文档预览取决于系统及已安装的 Quick Look 支持。便签展示会截断长文本，但复制和拖出读取完整原文；便签内部仍以明文 `.txt` 保存。
+
+### 更新记录与验证
+
+- **2026-10-22 · 功能扩展**：修复纯文本复制/拖拽，增加文件与文件夹支持、引用持久化、主题适配及传输回归测试。
+- **2026-10-22 · 视觉改进**：新增三类金属夹、淡便签横线、内容垂直居中和异步文件预览。
+- 编辑环境已完成差异及 Shell 语法检查；首轮功能由使用者反馈可用。编辑环境为 Linux，未执行 macOS 编译和 UI 自动验证，第二轮视觉更新仍需实机确认。回归脚本与人工验证步骤见 [DEVELOPMENT.md](DEVELOPMENT.md)。
+
+代码沿用上游许可证；原项目名称和图标不包含在 MIT 授权中，重新分发品牌资源前请阅读 [LICENSE](LICENSE)。
+
+---
+
+## 上游项目介绍
+
+以下为上游介绍与展示图片；其中发行下载链接、浏览器演示和其他语言说明不代表本分支新增功能。
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
   <img src="docs/images/hero-light.png" alt="Tendedero. Screenshots, hung out to dry. Three screenshots in glass frames hang from a thin line under the macOS menu bar.">
