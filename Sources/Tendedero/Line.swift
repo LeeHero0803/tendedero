@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import Combine
+import QuickLookThumbnailing
 import os
 
 let log = Logger(subsystem: "app.tendedero.Tendedero", category: "line")
@@ -11,6 +12,7 @@ struct Pegged: Identifiable, Equatable {
     let url: URL
     var thumb: NSImage
     var isFileReference = false
+    var filePreview: NSImage?
     var isTextNote: Bool { !isFileReference && isNote(url) }
     /// Every photo hangs a little crooked, like on a real line.
     let tilt = Double.random(in: -2.5...2.5)
@@ -70,6 +72,7 @@ final class Line: ObservableObject {
 
     private let storeKey = "pegged"
     private var darkCards = false
+    private var previewRequests: [UUID: QLThumbnailGenerator.Request] = [:]
 
     func updateAppearance(dark: Bool) {
         guard darkCards != dark else { return }
@@ -77,14 +80,15 @@ final class Line: ObservableObject {
         reloadThumbnails()
     }
 
-    private func thumbnail(_ url: URL, reference: Bool) -> NSImage? {
-        if reference { return makeFileCard(url, dark: darkCards) }
+    private func thumbnail(_ url: URL, reference: Bool, preview: NSImage? = nil) -> NSImage? {
+        if reference { return makeFileCard(url, dark: darkCards, preview: preview) }
         if isNote(url) { return makeNoteCard(url, scale: min(1, CGFloat(Int(320 * Layout.size.scale)) / 1040), dark: darkCards) }
         return makeThumbnail(url)
     }
 
     init() {
         restore()
+        for item in items where item.isFileReference { requestPreview(for: item.id) }
         scheduleGust()
     }
 
@@ -97,6 +101,7 @@ final class Line: ObservableObject {
         var item = Pegged(url: url, thumb: thumb, isFileReference: fileReference)
         item.flying = flying
         items.append(item)
+        if fileReference { requestPreview(for: item.id) }
         scroll = 0
         // A full line lets the oldest photo fall off the far end. Only one: a
         // line hung on a wider screen keeps its length here instead of losing
@@ -121,6 +126,7 @@ final class Line: ObservableObject {
 
     func drop(_ id: UUID, quietly: Bool = false) {
         guard let i = items.firstIndex(where: { $0.id == id }), !items[i].falling else { return }
+        if let request = previewRequests.removeValue(forKey: id) { QLThumbnailGenerator.shared.cancel(request) }
         onFall?(items[i])
         items[i].falling = true
         hitRects[id] = nil
@@ -298,6 +304,10 @@ final class Line: ObservableObject {
         guard let i = items.firstIndex(where: { $0.url == url && !$0.falling }),
               let thumb = thumbnail(url, reference: items[i].isFileReference) else { return }
         items[i].thumb = thumb
+        if items[i].isFileReference {
+            items[i].filePreview = nil
+            requestPreview(for: items[i].id)
+        }
     }
 
     /// Quick Look on this photo, with the rest of the line a key press away.
@@ -310,7 +320,28 @@ final class Line: ObservableObject {
     /// After a change of size, every photo is redrawn sharp at the new one.
     func reloadThumbnails() {
         for i in items.indices where !items[i].falling {
-            if let thumb = thumbnail(items[i].url, reference: items[i].isFileReference) { items[i].thumb = thumb }
+            if let thumb = thumbnail(items[i].url, reference: items[i].isFileReference, preview: items[i].filePreview) { items[i].thumb = thumb }
+        }
+    }
+
+    /// Quick Look supplies image, movie and document previews without blocking the UI.
+    /// Unsupported files and folders keep their system icon.
+    private func requestPreview(for id: UUID) {
+        guard let item = items.first(where: { $0.id == id && !$0.falling }), item.isFileReference,
+              (try? item.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true else { return }
+        if let old = previewRequests.removeValue(forKey: id) { QLThumbnailGenerator.shared.cancel(old) }
+        let request = QLThumbnailGenerator.Request(fileAt: item.url,
+            size: CGSize(width: 512, height: 320), scale: 1, representationTypes: .thumbnail)
+        previewRequests[id] = request
+        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { [weak self] representation, _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.previewRequests[id] === request else { return }
+                self.previewRequests[id] = nil
+                guard let representation, let i = self.items.firstIndex(where: { $0.id == id && !$0.falling }) else { return }
+                let preview = representation.nsImage
+                self.items[i].filePreview = preview
+                self.items[i].thumb = makeFileCard(self.items[i].url, dark: self.darkCards, preview: preview)
+            }
         }
     }
 
@@ -425,9 +456,31 @@ func makeNoteCard(_ url: URL, scale: CGFloat = 1, dark: Bool = false) -> NSImage
         .foregroundColor: NSColor(white: dark ? 0.92 : 0.13, alpha: 1),
         .paragraphStyle: style,
     ]
-    let box = NSRect(x: pad, y: pad, width: CGFloat(width) - pad * 2, height: CGFloat(height) - pad * 2)
-    NSAttributedString(string: text, attributes: attributes)
-        .draw(with: box, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+    let content = NSAttributedString(string: text, attributes: attributes)
+    let availableHeight = CGFloat(height) - pad * 2
+    let textWidth = CGFloat(width) - pad * 2
+    let measured = content.boundingRect(with: NSSize(width: textWidth, height: .greatestFiniteMagnitude),
+                                        options: [.usesLineFragmentOrigin, .usesFontLeading]).height
+    let textHeight = min(availableHeight, ceil(measured))
+    let box = NSRect(x: pad, y: (CGFloat(height) - textHeight) / 2, width: textWidth, height: textHeight)
+
+    // Quiet ruled paper; align the first rule to the centered text block.
+    let font = NSFont.systemFont(ofSize: 72 * scale, weight: .medium)
+    let lineHeight = font.ascender - font.descender + font.leading + style.lineSpacing
+    let rules = NSBezierPath()
+    rules.lineWidth = max(0.5, scale)
+    var y = box.maxY - (font.ascender - font.descender) - 2 * scale
+    while y < CGFloat(height) - pad { y += lineHeight }
+    while y > pad {
+        if y < CGFloat(height) - pad {
+            rules.move(to: NSPoint(x: pad, y: y))
+            rules.line(to: NSPoint(x: CGFloat(width) - pad, y: y))
+        }
+        y -= lineHeight
+    }
+    NSColor(white: dark ? 0.85 : 0.25, alpha: dark ? 0.09 : 0.08).setStroke()
+    rules.stroke()
+    content.draw(with: box, options: [.usesLineFragmentOrigin, .usesFontLeading, .truncatesLastVisibleLine])
     NSGraphicsContext.restoreGraphicsState()
 
     let image = NSImage(size: NSSize(width: width, height: height))
@@ -436,22 +489,36 @@ func makeNoteCard(_ url: URL, scale: CGFloat = 1, dark: Bool = false) -> NSImage
 }
 
 /// File references keep their identity, including .txt files and folders.
-func makeFileCard(_ url: URL, dark: Bool) -> NSImage {
+func makeFileCard(_ url: URL, dark: Bool, preview: NSImage? = nil) -> NSImage {
     let size = NSSize(width: 320, height: 246)
-    let icon = NSWorkspace.shared.icon(forFile: url.path)
+    let artwork = preview ?? NSWorkspace.shared.icon(forFile: url.path)
     return NSImage(size: size, flipped: false) { rect in
         (dark ? NSColor(white: 0.17, alpha: 1) : NSColor(white: 0.96, alpha: 1)).setFill()
         rect.fill()
-        icon.draw(in: NSRect(x: 112, y: 112, width: 96, height: 96))
         let style = NSMutableParagraphStyle()
         style.alignment = .center
         style.lineBreakMode = .byTruncatingMiddle
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 22, weight: .medium),
+            .font: NSFont.systemFont(ofSize: 20, weight: .medium),
             .foregroundColor: NSColor(white: dark ? 0.92 : 0.13, alpha: 1),
             .paragraphStyle: style,
         ]
-        (url.lastPathComponent as NSString).draw(in: NSRect(x: 16, y: 44, width: 288, height: 54), withAttributes: attributes)
+        // Center the complete artwork + gap + filename group, not just the icon.
+        let titleHeight: CGFloat = 26
+        let gap: CGFloat = 14
+        let artworkHeight: CGFloat = preview == nil ? 88 : 146
+        let groupHeight = artworkHeight + gap + titleHeight
+        let bottom = (size.height - groupHeight) / 2
+        let slot = NSRect(x: 20, y: bottom + titleHeight + gap, width: 280, height: artworkHeight)
+        let ratio = min(slot.width / max(1, artwork.size.width), slot.height / max(1, artwork.size.height))
+        let drawingSize = NSSize(width: artwork.size.width * ratio, height: artwork.size.height * ratio)
+        let drawingRect = NSRect(x: slot.midX - drawingSize.width / 2, y: slot.midY - drawingSize.height / 2,
+                                 width: drawingSize.width, height: drawingSize.height)
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(roundedRect: drawingRect, xRadius: preview == nil ? 0 : 6, yRadius: preview == nil ? 0 : 6).addClip()
+        artwork.draw(in: drawingRect)
+        NSGraphicsContext.restoreGraphicsState()
+        (url.lastPathComponent as NSString).draw(in: NSRect(x: 16, y: bottom, width: 288, height: titleHeight), withAttributes: attributes)
         return true
     }
 }

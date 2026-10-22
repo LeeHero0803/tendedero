@@ -22,3 +22,11 @@ Manual checks:
 3. Switch light/dark while notes are hanging; verify card backgrounds, text contrast and drag previews. Remove file cards and exceed line capacity; originals must remain.
 
 Validation in the editing environment: diff/ shell syntax checks only. Linux has no Swift compiler or macOS SDK; macOS tests, app build and UI verification have not been run.
+
+## Card presentation update
+
+- Image clips retain the original narrow silhouette. Text clips are slightly wider with two small grooves; file clips have a wider body and a small inset mark. All retain the brushed silver finish and original height.
+- Notes use low-contrast ruled lines in both appearances. The measured text block is vertically centered; long notes stay within the padded area and truncate.
+- File artwork and filename are centered as one group. Quick Look thumbnails are requested asynchronously for files, including supported images, videos and documents; folders/unsupported formats retain their system icons. Previews stay in memory and are reused on theme changes. Removed cards cancel pending requests; stale callbacks are ignored.
+
+Additional macOS checks: inspect a short note, multiline note and overflowing note in both themes; copy PNG/MOV/PDF/DOCX and a folder; switch themes while previews load; remove a loading card; verify the filename remains visible and previews do not stretch. These UI checks have not been executed in the Linux editing environment.

@@ -16,7 +16,7 @@ struct PeggedView: View {
 
     var body: some View {
         VStack(spacing: -12) {
-            Clothespin()
+            Clothespin(kind: item.isTextNote ? .text : item.isFileReference ? .file : .image)
                 .zIndex(1)
             card
         }
@@ -180,6 +180,11 @@ extension View {
 /// A minimal aluminium clip: a brushed metal pill with a slot where it
 /// grips the line, and a soft shadow so it reads on any background.
 struct Clothespin: View {
+    enum Kind { case image, text, file }
+    var kind: Kind = .image
+    private var width: CGFloat { kind == .file ? 13 : kind == .text ? 11 : 9 }
+    private var radius: CGFloat { kind == .text ? 2.5 : 3.5 }
+
     private let metal = LinearGradient(
         stops: [
             .init(color: Color(white: 0.70), location: 0),
@@ -190,11 +195,11 @@ struct Clothespin: View {
         startPoint: .leading, endPoint: .trailing)
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
             .fill(metal)
-            .frame(width: 9, height: 26)
+            .frame(width: width, height: 26)
             .overlay(
-                RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .stroke(LinearGradient(colors: [Color.white.opacity(0.9), Color.black.opacity(0.18)],
                                            startPoint: .top, endPoint: .bottom),
                             lineWidth: 0.6)
@@ -205,6 +210,22 @@ struct Clothespin: View {
                     .fill(Color.black.opacity(0.32))
                     .frame(width: 5, height: 1.4)
                     .padding(.top, 8.5)
+            }
+            .overlay(alignment: .bottom) {
+                // Same brushed aluminium, with restrained engraved details.
+                if kind == .text {
+                    VStack(spacing: 2) {
+                        Capsule().frame(width: 5, height: 0.8)
+                        Capsule().frame(width: 5, height: 0.8)
+                    }
+                    .foregroundStyle(Color.black.opacity(0.25))
+                    .padding(.bottom, 5)
+                } else if kind == .file {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .stroke(Color.black.opacity(0.25), lineWidth: 0.8)
+                        .frame(width: 6, height: 6)
+                        .padding(.bottom, 4)
+                }
             }
             .shadow(color: .black.opacity(0.30), radius: 2, y: 1.5)
             .allowsHitTesting(false)
