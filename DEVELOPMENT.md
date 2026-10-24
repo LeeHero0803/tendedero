@@ -40,3 +40,9 @@ Before saving a text payload, the watcher now asks the line whether a live text 
 The real watcher is exercised by Tests/ClipboardWatcher/main.swift using a private pasteboard and temporary inbox. scripts/test-clipboard.sh now covers repeated restores, private temporary selection, A/B/A history, whitespace differences, app-origin/private filtering, removing/editing/deleting notes and watcher recreation. Manual reproduction: copy A, select unrelated text without Copy several times, then copy B and restore A; no second A should appear while A remains hanging. Remove A and copy it again; it should hang once.
 
 Validation for this change: git diff --check and bash -n passed. This Linux workspace has no Swift compiler/macOS SDK; the Swift regression executable and macOS reproduction remain unrun.
+
+## Top-left hover activation (2026-10-25)
+
+The menu's Bring the line down submenu now contains Hover trigger area with mutually exclusive Entire menu bar and Top-left corner only choices. The persisted boolean defaults to the previous full-width behavior. In corner mode the activation rectangle is the leftmost 48 points of each screen's existing menu-bar band; it uses screen-relative coordinates, including negative display origins and the auto-hidden menu bar fallback. Only hidden-to-visible hover activation changes. Expanded-card interaction, keyboard/manual opening, new-item peeks and full-width menu-click dismissal retain their existing behavior. Click suppression resets when leaving the selected hover region.
+
+Validation: diff and Shell syntax checks only; macOS UI checks remain required. On Mac, select corner mode, hover over the center/right menu bar (must not open), enter the left 48 points for 0.25 s (must open), move to the cards (must stay open), click a menu then leave/re-enter the corner, restart to verify persistence, and repeat on a secondary display. Disable new-item peeks when testing hover in isolation.

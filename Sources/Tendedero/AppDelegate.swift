@@ -56,6 +56,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         set { UserDefaults.standard.set(!newValue, forKey: "menuBarRevealOff") }
     }
 
+    /// Restrict only hover activation; the open line remains fully interactive.
+    static var hoverFromTopLeftOnly: Bool {
+        get { UserDefaults.standard.bool(forKey: "hoverFromTopLeftOnly") }
+        set { UserDefaults.standard.set(newValue, forKey: "hoverFromTopLeftOnly") }
+    }
+
     /// Something new hanging shows itself for a moment. Off, it hangs
     /// quietly and waits for you to bring the line down.
     static var peeksAtNew: Bool {
@@ -468,6 +474,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return NSRect(x: screen.frame.minX, y: screen.frame.maxY - h, width: screen.frame.width, height: h)
     }
 
+    /// 48 points from the left edge of each display, within its menu bar.
+    /// AppKit screen coordinates also support displays left of/above the main one.
+    static func hoverTriggerBand(of screen: NSScreen) -> NSRect {
+        var band = menuBarBand(of: screen)
+        if hoverFromTopLeftOnly { band.size.width = min(48, band.width) }
+        return band
+    }
+
     /// A click anywhere in the top bar of any screen, a menu or an icon, puts the line away.
     private func watchMenuBarClicks() {
         let handler: (NSEvent?) -> Void = { [weak self] _ in
@@ -498,14 +512,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let now = Date()
 
         let screenUnderPointer = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
-        let inMenuBar = screenUnderPointer.map { NSMouseInRect(mouse, Self.menuBarBand(of: $0), false) } ?? false
-        if !inMenuBar { menuBarSuppressed = false }
+        let inHoverTrigger = screenUnderPointer.map { NSMouseInRect(mouse, Self.hoverTriggerBand(of: $0), false) } ?? false
+        if !inHoverTrigger { menuBarSuppressed = false }
 
         guard isRevealed else {
             // Resting in the menu bar brings the line down on that screen.
             // Pushing against the top edge is part of it, and it also works
             // when another display sits above and the pointer never stops.
-            if Self.opensFromMenuBar, let screen = screenUnderPointer, inMenuBar, !menuBarSuppressed,
+            if Self.opensFromMenuBar, let screen = screenUnderPointer, inHoverTrigger, !menuBarSuppressed,
                !FullScreen.blocksLine(on: screen) {
                 let since = hotZoneSince ?? now
                 hotZoneSince = since
@@ -696,6 +710,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         hover.state = Self.opensFromMenuBar ? .on : .off
         options.addItem(hover)
+        let triggerArea = NSMenuItem(title: L("Hover trigger area"), action: nil, keyEquivalent: "")
+        let areas = NSMenu()
+        for (title, cornerOnly) in [("Entire menu bar", false), ("Top-left corner only", true)] {
+            let choice = ClosureMenuItem(L(title)) { [weak self] in
+                Self.hoverFromTopLeftOnly = cornerOnly
+                self?.hotZoneSince = nil
+            }
+            choice.state = Self.hoverFromTopLeftOnly == cornerOnly ? .on : .off
+            areas.addItem(choice)
+        }
+        triggerArea.submenu = areas
+        options.addItem(triggerArea)
         let peek = ClosureMenuItem(L("When something new hangs")) {
             AppDelegate.peeksAtNew.toggle()
         }
