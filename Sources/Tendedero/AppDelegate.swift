@@ -78,6 +78,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.comeDown(on: nil)
             for url in urls { self.line.hang(url, fileReference: true) }
             self.itemsChanged()
+        }, containsText: { [weak self] text in
+            self?.line.containsText(text) ?? false
         })
         if ClipboardWatcher.isWatching { clipboardWatcher.start() }
 

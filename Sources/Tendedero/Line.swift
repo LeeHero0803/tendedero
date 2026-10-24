@@ -172,6 +172,12 @@ final class Line: ObservableObject {
         }
     }
 
+    /// Use live files rather than a permanent history cache: removed notes can
+    /// be copied again, restored notes are covered, and edits take effect immediately.
+    func containsText(_ text: String) -> Bool {
+        containsTextNote(text, at: items.filter { !$0.falling && $0.isTextNote }.map(\.url))
+    }
+
     // MARK: Actions on one photo
 
     func copy(_ id: UUID) {

@@ -14,7 +14,9 @@ final class ClipboardWatcher {
     private let onFiles: ([URL]) -> Void
     static let ownCopyType = NSPasteboard.PasteboardType("app.tendedero.clipboard-origin")
     private var timer: Timer?
-    private var lastCount = NSPasteboard.general.changeCount
+    private let pasteboard: NSPasteboard
+    private let containsText: (String) -> Bool
+    private var lastCount: Int
     /// The last image saved. Some apps put the same image on the clipboard
     /// again; it hangs once, unless it has been taken down since.
     private var last: (png: Data, url: URL)?
@@ -65,7 +67,12 @@ final class ClipboardWatcher {
     private static let maxBytes = 64 * 1024 * 1024
     nonisolated private static let maxPixels = 80_000_000
 
-    init(onImage: @escaping (URL) -> Void, onFiles: @escaping ([URL]) -> Void) {
+    init(onImage: @escaping (URL) -> Void, onFiles: @escaping ([URL]) -> Void,
+         containsText: @escaping (String) -> Bool,
+         pasteboard: NSPasteboard = .general) {
+        self.containsText = containsText
+        self.pasteboard = pasteboard
+        self.lastCount = pasteboard.changeCount
         self.onFiles = onFiles
         self.onImage = onImage
     }
@@ -73,7 +80,7 @@ final class ClipboardWatcher {
     func start() {
         guard timer == nil else { return }
         // Whatever is on the clipboard already is old news.
-        lastCount = NSPasteboard.general.changeCount
+        lastCount = pasteboard.changeCount
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.check() }
         }
@@ -86,8 +93,8 @@ final class ClipboardWatcher {
         timer = nil
     }
 
-    private func check() {
-        let pb = NSPasteboard.general
+    func check() {
+        let pb = pasteboard
         let count = pb.changeCount
         guard count != lastCount else { return }
         lastCount = count
@@ -117,8 +124,8 @@ final class ClipboardWatcher {
             let png = ClipboardWatcher.png(from: data, type: type)
             DispatchQueue.main.async {
                 // Copied over again in the meantime: that copy is the one that counts.
-                guard let png, NSPasteboard.general.changeCount == count else { return }
-                self?.save(png)
+                guard let self, let png, self.pasteboard.changeCount == count else { return }
+                self.save(png)
             }
         }
     }
@@ -128,6 +135,10 @@ final class ClipboardWatcher {
               let text = pb.string(forType: .string),
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               text.utf8.count <= Self.maxBytes, pb.changeCount == lastCount else { return }
+        // changeCount records ownership changes, not a user's Copy intent.
+        // Selection helpers may restore the same text without our origin marker.
+        // Check live notes before writing, so neither a card nor an orphan .txt is created.
+        guard !containsText(text), pb.changeCount == lastCount else { return }
         write(Data(text.utf8), ext: "txt")
     }
 

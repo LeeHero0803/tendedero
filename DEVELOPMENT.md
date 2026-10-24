@@ -30,3 +30,13 @@ Validation in the editing environment: diff/ shell syntax checks only. Linux has
 - File artwork and filename are centered as one group. Quick Look thumbnails are requested asynchronously for files, including supported images, videos and documents; folders/unsupported formats retain their system icons. Previews stay in memory and are reused on theme changes. Removed cards cancel pending requests; stale callbacks are ignored.
 
 Additional macOS checks: inspect a short note, multiline note and overflowing note in both themes; copy PNG/MOV/PDF/DOCX and a folder; switch themes while previews load; remove a loading card; verify the filename remains visible and previews do not stretch. These UI checks have not been executed in the Linux editing environment.
+
+## Duplicate notes after selecting text (2026-10-25)
+
+The text watcher previously treated every changeCount increment as a fresh copy and always wrote a new note. Selection/translation helpers can temporarily use the clipboard and then restore the previous text without the app's origin marker. This explains a possible trigger; the particular third-party writer has not been traced on the user's Mac.
+
+Before saving a text payload, the watcher now asks the line whether a live text note already contains those exact UTF-8 bytes. Falling cards and file references are excluded. Comparison uses full file contents and checks byte size first, so previews, whitespace trimming and Unicode normalization cannot collapse distinct payloads. Notes restored at launch and externally edited files are covered; removing a card or deleting its backing file allows a fresh capture. The pasteboard count is rechecked after lookup to avoid saving stale content. Existing duplicate cards are left for manual removal.
+
+The real watcher is exercised by Tests/ClipboardWatcher/main.swift using a private pasteboard and temporary inbox. scripts/test-clipboard.sh now covers repeated restores, private temporary selection, A/B/A history, whitespace differences, app-origin/private filtering, removing/editing/deleting notes and watcher recreation. Manual reproduction: copy A, select unrelated text without Copy several times, then copy B and restore A; no second A should appear while A remains hanging. Remove A and copy it again; it should hang once.
+
+Validation for this change: git diff --check and bash -n passed. This Linux workspace has no Swift compiler/macOS SDK; the Swift regression executable and macOS reproduction remain unrun.
