@@ -61,3 +61,7 @@ Manual validation matrix (not run in Linux):
 - Repeat application switches, drag a card while switching, and open a card menu. Pending delayed reconciliation must not move the drag source or close the menu.
 
 Validation completed here: git diff --check and bash -n scripts/test-clipboard.sh scripts/build-app.sh. No Swift compiler or macOS WindowServer is available in the editing environment; runtime recovery and full-screen behavior require Mac confirmation.
+
+## Stronger note rules (2026-10-29)
+
+Raised rule opacity from 0.09 to 0.18 in dark mode and 0.08 to 0.16 in light mode, and stroke width from max(0.5, scale) to max(1, 2 * scale). Text, paper colors, alignment and transfer contents are unchanged. Static diff checks passed; check short/multiline cards in both themes at all three sizes on Mac for readability and visible rules.

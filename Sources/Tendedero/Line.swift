@@ -474,7 +474,7 @@ func makeNoteCard(_ url: URL, scale: CGFloat = 1, dark: Bool = false) -> NSImage
     let font = NSFont.systemFont(ofSize: 72 * scale, weight: .medium)
     let lineHeight = font.ascender - font.descender + font.leading + style.lineSpacing
     let rules = NSBezierPath()
-    rules.lineWidth = max(0.5, scale)
+    rules.lineWidth = max(1, 2 * scale)
     var y = box.maxY - (font.ascender - font.descender) - 2 * scale
     while y < CGFloat(height) - pad { y += lineHeight }
     while y > pad {
@@ -484,7 +484,7 @@ func makeNoteCard(_ url: URL, scale: CGFloat = 1, dark: Bool = false) -> NSImage
         }
         y -= lineHeight
     }
-    NSColor(white: dark ? 0.85 : 0.25, alpha: dark ? 0.09 : 0.08).setStroke()
+    NSColor(white: dark ? 0.85 : 0.25, alpha: dark ? 0.18 : 0.16).setStroke()
     rules.stroke()
     content.draw(with: box, options: [.usesLineFragmentOrigin, .usesFontLeading, .truncatesLastVisibleLine])
     NSGraphicsContext.restoreGraphicsState()
