@@ -65,3 +65,9 @@ Validation completed here: git diff --check and bash -n scripts/test-clipboard.s
 ## Stronger note rules (2026-10-29)
 
 Raised rule opacity from 0.09 to 0.18 in dark mode and 0.08 to 0.16 in light mode, and stroke width from max(0.5, scale) to max(1, 2 * scale). Text, paper colors, alignment and transfer contents are unchanged. Static diff checks passed; check short/multiline cards in both themes at all three sizes on Mac for readability and visible rules.
+
+## Distinct metal clip silhouettes (2026-10-29)
+
+Replaced the text/file variants' subtle engravings with native SwiftUI paths: notes have a tapered binder clip body and two spring-wire handles in warm titanium; file references have an arched bulldog/mountain clip plate, circular eye and rolled jaw in cool steel. Images retain the original neutral silver pin. All variants keep a 26-point height inside a 34-point noninteractive frame, preserving cardOffsetBelowTop, hit rectangles and flight attachment geometry. No bitmap assets or dependencies are added.
+
+Static diff and shell checks passed. macOS compilation and visual checks remain pending: inspect all three silhouettes on light/dark desktops and at each card size, hover/copy/drag cards, and check that clips overlap the card edge without obscuring text or changing rope alignment. These are native vector designs; they have not been rendered in AppKit/SwiftUI in the Linux editing environment.
