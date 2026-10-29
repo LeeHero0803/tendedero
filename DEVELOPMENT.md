@@ -46,3 +46,18 @@ Validation for this change: git diff --check and bash -n passed. This Linux work
 The menu's Bring the line down submenu now contains Hover trigger area with mutually exclusive Entire menu bar and Top-left corner only choices. The persisted boolean defaults to the previous full-width behavior. In corner mode the activation rectangle is the leftmost 48 points of each screen's existing menu-bar band; it uses screen-relative coordinates, including negative display origins and the auto-hidden menu bar fallback. Only hidden-to-visible hover activation changes. Expanded-card interaction, keyboard/manual opening, new-item peeks and full-width menu-click dismissal retain their existing behavior. Click suppression resets when leaving the selected hover region.
 
 Validation: diff and Shell syntax checks only; macOS UI checks remain required. On Mac, select corner mode, hover over the center/right menu bar (must not open), enter the left 48 points for 0.25 s (must open), move to the cards (must stay open), click a menu then leave/re-enter the corner, restart to verify persistence, and repeat on a secondary display. Disable new-item peeks when testing hover in isolation.
+
+## Spaces hover recovery (2026-10-29)
+
+Code inspection found three distinct factors. First, NSWindow canJoinAllSpaces was already set, so adding it again is not a fix. Second, the logical isRevealed/isPresent flags could survive Space transitions; present() and setRevealed(true) previously returned early and tick() never reached hover activation while isRevealed stayed true, even if WindowServer no longer displayed the panel. Third, hover activation only updated geometry when the NSScreen object changed, although a different Space/full-screen state on the same physical display can have a different visible frame. These are code-level failure paths, not a reproduction of the user's exact desktop state. Full-screen rejection with showOverFullScreen disabled is intentional, not this bug.
+
+Changes: handle activeSpaceDidChange separately from app activation, reset stale hover/click timers on Space changes, synchronize geometry immediately and after the transition settles, make presentation reassert window ordering, and let tick return an invisible/off-Space panel to the normal hover path. Every hover reveal explicitly places on the triggering screen. Do not relocate/recover an active drag or context menu. Keep the existing canJoinAllSpaces/fullScreenAuxiliary collection behavior. Stage Manager is disabled in the user setup and is outside this fix. No application activation, focus stealing, moveToActiveSpace or fullscreen preference changes.
+
+Manual validation matrix (not run in Linux):
+- Two ordinary desktop Spaces: hidden/revealed line before switching; enter left corner after switching; repeat switches in both directions and rapidly.
+- Leave the pointer in the corner while switching; click Apple menu then switch desktops and retry; confirm a fresh 0.25 s dwell works and menu clicks still dismiss.
+- Secondary display with independent Spaces and auto-hiding menu bar: trigger on each display and verify positioning below the current menu bar.
+- Full-screen app: off means intentionally blocked; enable Over full screen apps and verify it opens without changing Space or focus. Exit fullscreen and retry on an ordinary desktop.
+- Repeat application switches, drag a card while switching, and open a card menu. Pending delayed reconciliation must not move the drag source or close the menu.
+
+Validation completed here: git diff --check and bash -n scripts/test-clipboard.sh scripts/build-app.sh. No Swift compiler or macOS WindowServer is available in the editing environment; runtime recovery and full-screen behavior require Mac confirmation.

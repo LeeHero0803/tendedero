@@ -111,16 +111,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Photos kept from last time show themselves for a moment.
         if line.liveCount > 0 { comeDown(on: nil) }
 
-        // Entering or leaving full screen switches Space. Check again once the
-        // switch animation has settled.
         let workspace = NSWorkspace.shared.notificationCenter
-        for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didActivateApplicationNotification] {
-            workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.refresh()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self?.refresh() }
-                }
+        workspace.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
+                              object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.synchronizeSpace()
+                // Full-screen/menu-bar geometry may settle after the notification.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self?.synchronizeSpace() }
             }
+        }
+        workspace.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                              object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
         }
 
         NotificationCenter.default.addObserver(
@@ -363,6 +365,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                       width: size.width, height: size.height)
     }
 
+    /// NSScreen identifies a physical display, not its currently active Space.
+    /// Reconcile geometry and ordering even when the display itself did not change.
+    private func synchronizeSpace() {
+        hotZoneSince = nil
+        menuBarSuppressed = false
+        awaySince = nil
+        // Do not relocate the source panel in the middle of an active drag/menu.
+        if !GrabView.isDragging && !GrabView.isShowingMenu {
+            panel.placeOnScreen(LinePanel.screenUnderPointer())
+            updateCapacity()
+        }
+        refresh()
+    }
+
     /// Decides whether the panel is ordered in at all: something to show,
     /// and no full screen app on that screen.
     private func refresh() {
@@ -379,7 +395,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func present() {
-        guard !isPresent else { return }
         isPresent = true
         panel.alphaValue = 1
         // The window itself only comes in while the line is down; see setRevealed.
@@ -405,7 +420,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func setRevealed(_ on: Bool) {
-        guard on != isRevealed else { return }
+        guard on != isRevealed else {
+            // Logical visibility can outlive actual ordering during a Space switch.
+            if on && isPresent { panel.orderFrontRegardless() }
+            return
+        }
         isRevealed = on
         line.revealed = on
         // It always comes down showing the newest.
@@ -515,6 +534,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let inHoverTrigger = screenUnderPointer.map { NSMouseInRect(mouse, Self.hoverTriggerBand(of: $0), false) } ?? false
         if !inHoverTrigger { menuBarSuppressed = false }
 
+        // If WindowServer left the panel hidden/on the old Space, return to the
+        // hover path instead of indefinitely treating an invisible line as open.
+        if isRevealed && !GrabView.isDragging && !GrabView.isShowingMenu,
+           (!panel.isVisible || !panel.isOnActiveSpace) {
+            setRevealed(false)
+            refresh()
+        }
+
         guard isRevealed else {
             // Resting in the menu bar brings the line down on that screen.
             // Pushing against the top edge is part of it, and it also works
@@ -525,10 +552,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 hotZoneSince = since
                 if now.timeIntervalSince(since) >= Self.revealDelay {
                     hotZoneSince = nil
-                    if panel.screen != screen {
-                        panel.placeOnScreen()
-                        updateCapacity()
-                    }
+                    // A different Space on the same display can have a different
+                    // menu-bar/visible frame. Always place for this reveal.
+                    panel.placeOnScreen(screen)
+                    updateCapacity()
                     refresh()
                     reveal()
                 }
