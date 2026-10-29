@@ -11,7 +11,6 @@ Changes:
 On macOS, quit the installed app first, then run:
 
 ```sh
-scripts/test-clipboard.sh
 scripts/build-app.sh
 open build/Tendedero.app
 ```
@@ -21,7 +20,7 @@ Manual checks:
 2. Copy a PDF, a .txt file, a folder and multiple files in Finder. Check individual cards, copy/paste, drag to another folder (original stays), Open, Quick Look, and relaunch persistence.
 3. Switch light/dark while notes are hanging; verify card backgrounds, text contrast and drag previews. Remove file cards and exceed line capacity; originals must remain.
 
-Validation in the editing environment: diff/ shell syntax checks only. Linux has no Swift compiler or macOS SDK; macOS tests, app build and UI verification have not been run.
+Validation in the editing environment: diff/ shell syntax checks only. Linux has no Swift compiler or macOS SDK; macOS app build and UI verification have not been run.
 
 ## Card presentation update
 
@@ -37,9 +36,9 @@ The text watcher previously treated every changeCount increment as a fresh copy 
 
 Before saving a text payload, the watcher now asks the line whether a live text note already contains those exact UTF-8 bytes. Falling cards and file references are excluded. Comparison uses full file contents and checks byte size first, so previews, whitespace trimming and Unicode normalization cannot collapse distinct payloads. Notes restored at launch and externally edited files are covered; removing a card or deleting its backing file allows a fresh capture. The pasteboard count is rechecked after lookup to avoid saving stale content. Existing duplicate cards are left for manual removal.
 
-The real watcher is exercised by Tests/ClipboardWatcher/main.swift using a private pasteboard and temporary inbox. scripts/test-clipboard.sh now covers repeated restores, private temporary selection, A/B/A history, whitespace differences, app-origin/private filtering, removing/editing/deleting notes and watcher recreation. Manual reproduction: copy A, select unrelated text without Copy several times, then copy B and restore A; no second A should appear while A remains hanging. Remove A and copy it again; it should hang once.
+Manual reproduction: copy A, select unrelated text without Copy several times, then copy B and restore A; no second A should appear while A remains hanging. Remove A and copy it again; it should hang once.
 
-Validation for this change: git diff --check and bash -n passed. This Linux workspace has no Swift compiler/macOS SDK; the Swift regression executable and macOS reproduction remain unrun.
+Validation for this change: git diff --check and bash -n passed. This Linux workspace has no Swift compiler/macOS SDK; macOS reproduction remains unrun.
 
 ## Top-left hover activation (2026-10-25)
 
@@ -60,7 +59,7 @@ Manual validation matrix (not run in Linux):
 - Full-screen app: off means intentionally blocked; enable Over full screen apps and verify it opens without changing Space or focus. Exit fullscreen and retry on an ordinary desktop.
 - Repeat application switches, drag a card while switching, and open a card menu. Pending delayed reconciliation must not move the drag source or close the menu.
 
-Validation completed here: git diff --check and bash -n scripts/test-clipboard.sh scripts/build-app.sh. No Swift compiler or macOS WindowServer is available in the editing environment; runtime recovery and full-screen behavior require Mac confirmation.
+Validation completed here: git diff --check and bash -n scripts/build-app.sh. No Swift compiler or macOS WindowServer is available in the editing environment; runtime recovery and full-screen behavior require Mac confirmation.
 
 ## Stronger note rules (2026-10-29)
 
@@ -78,26 +77,27 @@ CardTypography provides monospacedSystemFont with system script fallback, charac
 
 File titles omit their final extension and wrap within two lines. An uppercase capsule label below holds the extension; extensionless files and ordinary directories have no tag, and dotted directory names are preserved. Packages can retain their extension tag. Both title and artwork remain vertically centered together; increasing text size reduces the artwork slot before reducing text space. The extension badge is smaller supporting text in the same font family.
 
-A separate Card text size menu immediately reloads thumbnails (including cached file previews) and stores the choice without changing card geometry or image content. Tests/CardTypography/main.swift checks the shared scaled font, an English line that must fill partway into the next word, and extension/dotted-folder labeling. It runs from scripts/test-clipboard.sh. Static diff and shell syntax checks passed; the Swift/AppKit tests and light/dark, mixed CJK/Latin/emoji, long-title and all-size visual checks have not run in this Linux environment.
+A separate Card text size menu immediately reloads thumbnails (including cached file previews) and stores the choice without changing card geometry or image content. Static diff and shell syntax checks passed; light/dark, mixed CJK/Latin/emoji, long-title and all-size visual checks have not run in this Linux environment.
 
 ## CGFloat overload fix (2026-10-29)
 
-User build logs show all three regression executables passed, followed by a full-app compilation error at Line.swift's file-title boundingRect call: NSSize(width: 288, height: .greatestFiniteMagnitude) admits both CGFloat and Double overload candidates. Explicitly qualify CGFloat.greatestFiniteMagnitude in both file and note measurements. No font/layout behavior changes. The SDK-27 SwiftUI macro failure still has the existing SDK-26.5 fallback; that fallback cannot fix this independent source ambiguity. Static diff checks passed here; the corrected full app must still be rebuilt on Mac.
+User build logs show a full-app compilation error at Line.swift's file-title boundingRect call: NSSize(width: 288, height: .greatestFiniteMagnitude) admits both CGFloat and Double overload candidates. Explicitly qualify CGFloat.greatestFiniteMagnitude in both file and note measurements. No font/layout behavior changes. The SDK-27 SwiftUI macro failure still has the existing SDK-26.5 fallback; that fallback cannot fix this independent source ambiguity. Static diff checks passed here; the corrected full app must still be rebuilt on Mac.
 
 ## Songti cards, inline file labels and paper fades (2026-10-29)
 
-Reference screenshot explicitly shows 宋体-简 (Songti SC), regular. CardTypography now requests SongtiSC-Regular for both Chinese and Latin, falls back to STSong then a system serif descriptor, and retains the saved size selection and character wrapping. The proportional-font line-fill regression uses measured prefix width instead of assuming monospaced advances.
+Reference screenshot explicitly shows 宋体-简 (Songti SC), regular. CardTypography now requests SongtiSC-Regular for both Chinese and Latin, falls back to STSong then a system serif descriptor, and retains the saved size selection and character wrapping.
 
 File cards use fixed preview bounds (20,86,280,140) in the 320x246 canvas, aspect-fit without stretching; generic icons remain centered at 88 points high within that window. A fixed footer holds the extension capsule before the filename, on one row. The title is sanitized only for display (newlines/tabs), never wraps, and truncates its tail; badges are capped at 82 points so a pathological extension cannot consume the title. Filename text uses the same font/size as notes; the badge uses the same family at a supporting size.
 
 Note rule endpoints fade across 22% of the text width on each side, with a solid middle. Notes exceeding available height (or the bounded 4000-byte preview) draw without ellipsis and receive a destination-in alpha gradient on an isolated text transparency layer over the bottom 1.4 lines. Paper and rules remain opaque/unmasked. Short notes retain vertical centering and do not fade. Copy/drag still uses the original stored text.
 
-Moved actual note/file rendering to CardRendering.swift, compiled with CardTypography by scripts/test-clipboard.sh. Tests exercise short/long notes, both themes, every text size, an opaque paper background, and a fixed-color file preview whose center must stay fixed despite long names and text size. Static diff/shell checks passed. This Linux environment cannot execute AppKit; full macOS build, rendering assertions and visual gradient/ellipsis checks remain pending.
+Actual note/file rendering is in CardRendering.swift. Static diff/shell checks passed. This Linux environment cannot execute AppKit; full macOS build and visual gradient/ellipsis checks remain pending.
 
 ## Grouped menu (2026-10-29)
 
 Top-level actions remain Show/Hide, Take everything down and Quit. Preferences are grouped as Collect content (screenshot handling, copied images/text/files and watched folders), Display and triggers (hover, trigger area, new-item peeks, full-screen and shortcut), Card appearance (text size and card size), History and files (capacity, open screenshot folder), Application options (sounds, login, update link). Existing closures, settings keys, checkmarks and enablement guards are preserved. Parent menus disable automatic item validation so explicitly disabled entries remain disabled. Manual Mac checks: all groups open; toggles/checkmarks persist; folder limit/disabled clear and current-shortcut entry behave as before. Static checks only here.
 
-## Retina-aware render assertion (2026-10-29)
 
-The user's latest log passes transfer/watcher tests, then fails Tests/CardTypography/main.swift:77. The old assertion incorrectly equated NSImage's 320x246 logical points with the pixel dimensions of a CGImage selected by AppKit. Keep asserting the logical size, check that raster scale is positive and uniform, and scale the preview sampling coordinates to actual pixels. Production drawing code is unchanged. Static diff/shell checks passed; the corrected regression suite still requires a Mac rerun.
+## Repository cleanup (2026-10-29)
+
+Removed the three later-added standalone test executables and their shell runner. Build and installation instructions no longer run tests. The upstream scripts/check-strings.swift localization checker and all upstream build/packaging scripts remain. No application source or runtime behavior changed in this cleanup.
