@@ -700,27 +700,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         clearItem.isEnabled = line.liveCount > 0
         menu.addItem(clearItem)
+        menu.addItem(.separator())
+
+        // Keep frequent actions at the top, group preferences by purpose.
+        func group(_ title: String) -> NSMenu {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            let submenu = NSMenu()
+            submenu.autoenablesItems = false
+            item.submenu = submenu
+            menu.addItem(item)
+            return submenu
+        }
+        let collectionMenu = group(L("Collect content"))
+        let displayMenu = group(L("Display and triggers"))
+        let appearanceMenu = group(L("Card appearance"))
+        let storageMenu = group(L("History and files"))
+        let applicationMenu = group(L("Application options"))
 
         let inbox = ClosureMenuItem(L("Handle screenshots")) { [weak self] in
             self?.setInbox(!Inbox.isEnabled)
         }
         inbox.state = Inbox.isEnabled ? .on : .off
         inbox.toolTip = L("Screenshots hang instantly and skip the Desktop")
-        menu.addItem(inbox)
+        collectionMenu.addItem(inbox)
 
         let clipboard = ClosureMenuItem(L("Hang copied images")) { [weak self] in
             self?.setClipboard(!ClipboardWatcher.isEnabled)
         }
         clipboard.state = ClipboardWatcher.isEnabled ? .on : .off
         clipboard.toolTip = L("Images you copy hang on the line too")
-        menu.addItem(clipboard)
+        collectionMenu.addItem(clipboard)
 
         let clipText = ClosureMenuItem(L("Hang copied text")) { [weak self] in
             self?.setClipboardText(!ClipboardWatcher.textEnabled)
         }
         clipText.state = ClipboardWatcher.textEnabled ? .on : .off
         clipText.toolTip = L("Text you copy hangs as a note card")
-        menu.addItem(clipText)
+        collectionMenu.addItem(clipText)
 
         let clipFiles = ClosureMenuItem(L("Hang copied files")) { [weak self] in
             ClipboardWatcher.filesEnabled.toggle()
@@ -728,10 +744,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         clipFiles.state = ClipboardWatcher.filesEnabled ? .on : .off
         clipFiles.toolTip = L("Files and folders you copy hang as references")
-        menu.addItem(clipFiles)
+        collectionMenu.addItem(clipFiles)
 
-        let bringDown = NSMenuItem(title: L("Bring the line down"), action: nil, keyEquivalent: "")
-        let options = NSMenu()
+        let options = displayMenu
         let hover = ClosureMenuItem(L("When the pointer rests in the menu bar")) {
             AppDelegate.opensFromMenuBar.toggle()
         }
@@ -760,8 +775,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         fullScreen.state = FullScreen.showLineOver ? .on : .off
         options.addItem(fullScreen)
-        bringDown.submenu = options
-        menu.addItem(bringDown)
 
         let folderItem = NSMenuItem(title: L("Also watch folders"), action: nil, keyEquivalent: "")
         let folderMenu = NSMenu()
@@ -791,7 +804,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             folderMenu.addItem(stop)
         }
         folderItem.submenu = folderMenu
-        menu.addItem(folderItem)
+        collectionMenu.addItem(folderItem)
 
         let keepItem = NSMenuItem(title: L("Keep on line"), action: nil, keyEquivalent: "")
         let keeps = NSMenu()
@@ -804,7 +817,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             keeps.addItem(item)
         }
         keepItem.submenu = keeps
-        menu.addItem(keepItem)
+        storageMenu.addItem(keepItem)
 
         let textSizeItem = NSMenuItem(title: L("Card text size"), action: nil, keyEquivalent: "")
         let textSizes = NSMenu()
@@ -821,9 +834,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             textSizes.addItem(choice)
         }
         textSizeItem.submenu = textSizes
-        menu.addItem(textSizeItem)
+        appearanceMenu.addItem(textSizeItem)
 
-        let sizeItem = NSMenuItem(title: L("Size"), action: nil, keyEquivalent: "")
+        let sizeItem = NSMenuItem(title: L("Card size"), action: nil, keyEquivalent: "")
         let sizes = NSMenu()
         for (size, title) in [(Layout.Size.small, L("Small")), (.medium, L("Medium")), (.large, L("Large"))] {
             let item = ClosureMenuItem(title) { [weak self] in self?.setSize(size) }
@@ -831,7 +844,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             sizes.addItem(item)
         }
         sizeItem.submenu = sizes
-        menu.addItem(sizeItem)
+        appearanceMenu.addItem(sizeItem)
 
         let shortcutItem = NSMenuItem(title: L("Shortcut"), action: nil, keyEquivalent: "")
         let shortcuts = NSMenu()
@@ -840,32 +853,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         shortcuts.addItem(current)
         shortcuts.addItem(ClosureMenuItem(L("Change Shortcut…")) { [weak self] in self?.changeShortcut() })
         shortcutItem.submenu = shortcuts
-        menu.addItem(shortcutItem)
+        displayMenu.addItem(.separator())
+        displayMenu.addItem(shortcutItem)
 
-        menu.addItem(ClosureMenuItem(L("Open screenshots folder")) { [weak self] in
+        storageMenu.addItem(ClosureMenuItem(L("Open screenshots folder")) { [weak self] in
             guard let self else { return }
             NSWorkspace.shared.open(self.watcher.folder)
         })
-
-        menu.addItem(.separator())
 
         let sound = ClosureMenuItem(L("Sounds")) { [weak self] in
             guard let self else { return }
             self.line.soundOn.toggle()
         }
         sound.state = line.soundOn ? .on : .off
-        menu.addItem(sound)
+        applicationMenu.addItem(sound)
 
         let login = ClosureMenuItem(L("Open at login")) {
             AppDelegate.toggleLaunchAtLogin()
         }
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        menu.addItem(login)
+        applicationMenu.addItem(login)
 
         // The app never connects to anything, so it cannot tell when a new
         // version is out. The website can: it is opened with this version
         // and language, and says whether there is a newer one.
-        menu.addItem(ClosureMenuItem(L("Check for Updates…")) {
+        applicationMenu.addItem(.separator())
+        applicationMenu.addItem(ClosureMenuItem(L("Check for Updates…")) {
             NSWorkspace.shared.open(AppDelegate.updatesURL)
         })
 

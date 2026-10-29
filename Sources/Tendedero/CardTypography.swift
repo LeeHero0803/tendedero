@@ -19,9 +19,14 @@ enum CardTypography {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "cardTextSize") }
     }
 
-    /// SF Mono for Latin text, with system fallback for Chinese and other scripts.
+    /// Match Pages' 宋体-简 / Songti SC Regular for both Chinese and Latin text.
     static func font(canvasWidth: CGFloat = 320) -> NSFont {
-        NSFont.monospacedSystemFont(ofSize: size.points * canvasWidth / 320, weight: .medium)
+        let points = size.points * canvasWidth / 320
+        if let songti = NSFont(name: "SongtiSC-Regular", size: points) { return songti }
+        if let song = NSFont(name: "STSong", size: points) { return song }
+        let system = NSFont.systemFont(ofSize: points)
+        return NSFont(descriptor: system.fontDescriptor.withDesign(.serif) ?? system.fontDescriptor,
+                      size: points) ?? system
     }
 
     static func paragraph(centered: Bool = false, scale: CGFloat = 1) -> NSMutableParagraphStyle {

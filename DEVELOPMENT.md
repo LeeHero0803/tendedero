@@ -83,3 +83,17 @@ A separate Card text size menu immediately reloads thumbnails (including cached 
 ## CGFloat overload fix (2026-10-29)
 
 User build logs show all three regression executables passed, followed by a full-app compilation error at Line.swift's file-title boundingRect call: NSSize(width: 288, height: .greatestFiniteMagnitude) admits both CGFloat and Double overload candidates. Explicitly qualify CGFloat.greatestFiniteMagnitude in both file and note measurements. No font/layout behavior changes. The SDK-27 SwiftUI macro failure still has the existing SDK-26.5 fallback; that fallback cannot fix this independent source ambiguity. Static diff checks passed here; the corrected full app must still be rebuilt on Mac.
+
+## Songti cards, inline file labels and paper fades (2026-10-29)
+
+Reference screenshot explicitly shows 宋体-简 (Songti SC), regular. CardTypography now requests SongtiSC-Regular for both Chinese and Latin, falls back to STSong then a system serif descriptor, and retains the saved size selection and character wrapping. The proportional-font line-fill regression uses measured prefix width instead of assuming monospaced advances.
+
+File cards use fixed preview bounds (20,86,280,140) in the 320x246 canvas, aspect-fit without stretching; generic icons remain centered at 88 points high within that window. A fixed footer holds the extension capsule before the filename, on one row. The title is sanitized only for display (newlines/tabs), never wraps, and truncates its tail; badges are capped at 82 points so a pathological extension cannot consume the title. Filename text uses the same font/size as notes; the badge uses the same family at a supporting size.
+
+Note rule endpoints fade across 22% of the text width on each side, with a solid middle. Notes exceeding available height (or the bounded 4000-byte preview) draw without ellipsis and receive a destination-in alpha gradient on an isolated text transparency layer over the bottom 1.4 lines. Paper and rules remain opaque/unmasked. Short notes retain vertical centering and do not fade. Copy/drag still uses the original stored text.
+
+Moved actual note/file rendering to CardRendering.swift, compiled with CardTypography by scripts/test-clipboard.sh. Tests exercise short/long notes, both themes, every text size, an opaque paper background, and a fixed-color file preview whose center must stay fixed despite long names and text size. Static diff/shell checks passed. This Linux environment cannot execute AppKit; full macOS build, rendering assertions and visual gradient/ellipsis checks remain pending.
+
+## Grouped menu (2026-10-29)
+
+Top-level actions remain Show/Hide, Take everything down and Quit. Preferences are grouped as Collect content (screenshot handling, copied images/text/files and watched folders), Display and triggers (hover, trigger area, new-item peeks, full-screen and shortcut), Card appearance (text size and card size), History and files (capacity, open screenshot folder), Application options (sounds, login, update link). Existing closures, settings keys, checkmarks and enablement guards are preserved. Parent menus disable automatic item validation so explicitly disabled entries remain disabled. Manual Mac checks: all groups open; toggles/checkmarks persist; folder limit/disabled clear and current-shortcut entry behave as before. Static checks only here.

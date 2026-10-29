@@ -9,5 +9,5 @@ swiftc Sources/Tendedero/ClipboardTransfer.swift Tests/ClipboardTransfer/main.sw
 swiftc Sources/Tendedero/TextNoteDeduplication.swift Sources/Tendedero/ClipboardWatcher.swift Tests/ClipboardWatcher/main.swift -o "$test_dir/watcher-tests"
 "$test_dir/watcher-tests"
 
-swiftc Sources/Tendedero/CardTypography.swift Tests/CardTypography/main.swift -o "$test_dir/typography-tests"
+swiftc Sources/Tendedero/CardTypography.swift Sources/Tendedero/CardRendering.swift Tests/CardTypography/main.swift -o "$test_dir/typography-tests"
 "$test_dir/typography-tests"
