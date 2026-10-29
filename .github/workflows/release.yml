@@ -1,0 +1,46 @@
+name: Build macOS release
+on:
+  push:
+    branches: [feature/universal-clipboard]
+    paths:
+      - '.github/workflows/release.yml'
+      - 'scripts/package-release.sh'
+      - 'scripts/make-lineboard-icon.swift'
+      - 'docs/releases/1.6.0.md'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: macos-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build and package universal app
+        run: |
+          xcodebuild -version
+          swift --version
+          scripts/package-release.sh 1.6.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lineboard-1.6.0-universal
+          path: build/release/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Prepare draft release with assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag=lineboard-v1.6.0
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --draft --target "$GITHUB_SHA" \
+              --title "Lineboard 1.6.0 · 通用剪贴板晾衣绳" \
+              --notes-file docs/releases/1.6.0.md
+          fi
+          gh release upload "$tag" build/release/* --clobber

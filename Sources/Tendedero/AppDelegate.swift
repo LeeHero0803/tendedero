@@ -676,7 +676,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let on = ClipboardWatcher.isWatching
         let description = ClipboardWatcher.filesEnabled ? L("Tendedero, hanging copied files")
             : ClipboardWatcher.isEnabled ? L("Tendedero, hanging copied images")
-            : on ? L("Tendedero, hanging copied text") : "Tendedero"
+            : on ? L("Tendedero, hanging copied text") : appDisplayName
         let image = NSImage(systemSymbolName: on ? "tshirt.fill" : "tshirt", accessibilityDescription: description)
         image?.isTemplate = true
         statusItem.button?.image = image
@@ -891,14 +891,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// tendedero.app with the running version, and the menus' language when
     /// the website has it too, so the page answers in the same words.
     private static var updatesURL: URL {
-        var components = URLComponents(string: "https://tendedero.app/")!
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        var query = [URLQueryItem(name: "update", value: version)]
-        if let language = Bundle.main.preferredLocalizations.first, ["en", "es", "gl", "fr", "pt-BR", "ja", "ko", "zh-Hans"].contains(language) {
-            query.append(URLQueryItem(name: "lang", value: language))
-        }
-        components.queryItems = query
-        return components.url!
+        URL(string: "https://github.com/LeeHero0803/tendedero/releases")!
     }
 
     private static func toggleLaunchAtLogin() {

@@ -1,6 +1,8 @@
 # Tendedero · 通用剪贴板扩展
 
-本分支 `feature/universal-clipboard` 基于 [Anubhav-Rai 的文字便签分支](https://github.com/Anubhav-Rai/tendedero/tree/feature/copied-text)，在原有截图晾衣绳上增加文件引用、纯文本传输修复和卡片样式改进。原项目：[alejandrobujan/tendedero](https://github.com/alejandrobujan/tendedero)。这是非官方源码扩展，目前未发布本分支的安装包。
+本分支 `feature/universal-clipboard` 基于 [Anubhav-Rai 的文字便签分支](https://github.com/Anubhav-Rai/tendedero/tree/feature/copied-text)，在原有截图晾衣绳上增加文件引用、纯文本传输修复和卡片样式改进。原项目：[alejandrobujan/tendedero](https://github.com/alejandrobujan/tendedero)。这是非官方扩展，独立发布包使用 **Lineboard** 名称和原创图标，遵循上游的名称／图标限制。
+
+**[下载发布包](https://github.com/LeeHero0803/tendedero/releases) · [完整源码构建说明](docs/BUILDING.md)**
 
 ## 本分支的更新
 
@@ -13,24 +15,32 @@
 | 类型识别 | 图片使用银色细金属夹；便签使用微暖钛色金属长尾夹，带双线手柄和梯形夹体；文件使用微冷钢色金属山形夹，带拱形弹片、圆孔和卷边夹口。保留玻璃边框与摆动风格。 |
 | 生命周期 | 文件引用类型随记录保存；忽略应用自身复制，保留私密剪贴板过滤；卡片移除后取消未完成的预览请求。 |
 
-### 使用与构建
+### 安装与源码构建
 
-需要 macOS 14+ 和可用的 Swift/macOS 开发工具链。先退出正在运行的旧版：
+安装包请从本仓库 **Releases** 下载 `Lineboard-版本-universal.dmg` 或 `.app.zip`；支持 macOS 14+、Apple Silicon 和 Intel。GitHub 自动生成的 Source code 是源码，不是安装包。首次运行前退出旧 Tendedero，并关闭旧版开机启动。
+
+本分支安装包为 ad-hoc 签名、未经 Apple 公证。确认来源可信后，使用系统「隐私与安全性」中的「仍要打开」；无需关闭 Gatekeeper/SIP。
+
+从源码生成完整发布包（推荐完整 Xcode；无测试前置步骤）：
 
 ```sh
 git clone -b feature/universal-clipboard https://github.com/LeeHero0803/tendedero.git
 cd tendedero
-scripts/build-app.sh
-open build/Tendedero.app
+scripts/package-release.sh 1.6.0
+open build/Lineboard.app
 ```
 
-在菜单栏按需开启「挂起复制的文字」「挂起复制的文件」和图片监听。构建成功后，将 `build/Tendedero.app` 替换到「应用程序」目录。
+输出位于 `build/release/`：通用版 DMG、App ZIP、SHA-256 校验与源码提交信息。完整环境准备、开发构建与安装步骤见 [docs/BUILDING.md](docs/BUILDING.md)。
+
+在菜单栏按需开启文字／图片／文件收集；设置和历史与旧版兼容，避免两份 App 同时运行。
 
 **文件卡片保存的是引用，不是备份。** 拖出文件卡片默认复制，原文件保留；移除卡片或容量淘汰不会删除引用的原文件。右键明确选择「Move to Trash」仍会删除原文件。源文件移动或删除后，引用会失效并被清理。原有截图卡片仍遵循上游的拖放和清理行为。
 
 部分网页输入框可能拒绝文本拖放；文档预览取决于系统及已安装的 Quick Look 支持。便签展示会截断长文本，但复制和拖出读取完整原文；便签内部仍以明文 `.txt` 保存。
 
 ### 更新记录与验证
+
+- **2026-10-29 · 构建与发布**：补全源码构建说明；新增 macOS 自动构建、通用版 ZIP／DMG、SHA-256 和构建提交信息。分发包使用独立 Lineboard 名称与原创图标，附原许可证；不运行测试脚本。
 
 - **2026-10-29 · 简约夹子**：长尾夹与山形夹分别收窄至约 16／20 点，减少手柄与金属装饰细节；三种夹子回归接近原款的轻量银色风格，仅保留细微暖／冷色差和轮廓区别。悬挂高度与卡片位置保留。
 
