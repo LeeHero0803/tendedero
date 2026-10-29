@@ -17,7 +17,7 @@ cp LICENSE "$APP/Contents/Resources/LICENSE"
 # Adding resources invalidates the signature, so sign the final bundle again.
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict "$APP"
-lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/Tendedero"
+lipo "$APP/Contents/MacOS/Tendedero" -verify_arch arm64 x86_64
 OUT="build/release"
 mkdir -p "$OUT"
 ZIP="Lineboard-$VERSION-universal.app.zip"
