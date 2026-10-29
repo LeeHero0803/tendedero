@@ -337,7 +337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             line.land(id)
             return
         }
-        CaptureFlight.fly(image: image, from: from, to: to, tilt: CGFloat(item.tilt), on: screen) { [weak self] in
+        CaptureFlight.fly(image: image, from: from, to: to, tilt: CGFloat(item.tilt), clipKind: item.clipKind, on: screen) { [weak self] in
             self?.line.land(id)
         }
     }
@@ -347,7 +347,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard isPresent, isRevealed, !item.flying, let screen = panel.screen,
               let card = cardFrame(for: item.id),
               let image = item.thumb.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
-        CaptureFlight.fall(image: image, card: card, tilt: CGFloat(item.tilt), on: screen)
+        CaptureFlight.fall(image: image, card: card, tilt: CGFloat(item.tilt), clipKind: item.clipKind, on: screen)
     }
 
     /// Where a card will hang, in screen coordinates, using the same layout

@@ -29,6 +29,11 @@ enum CardTypography {
                       size: points) ?? system
     }
 
+    /// Non-note UI uses the regular system face, sharing only the size preference.
+    static func fileFont(scale: CGFloat = 1) -> NSFont {
+        NSFont.systemFont(ofSize: size.points * scale, weight: .regular)
+    }
+
     static func paragraph(centered: Bool = false, scale: CGFloat = 1) -> NSMutableParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = centered ? .center : .left

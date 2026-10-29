@@ -101,3 +101,15 @@ Top-level actions remain Show/Hide, Take everything down and Quit. Preferences a
 ## Repository cleanup (2026-10-29)
 
 Removed the three later-added standalone test executables and their shell runner. Build and installation instructions no longer run tests. The upstream scripts/check-strings.swift localization checker and all upstream build/packaging scripts remain. No application source or runtime behavior changed in this cleanup.
+
+## File-label baseline and animation clip identity (2026-10-29)
+
+File labels previously drew NSString into a tight box sized from nominal font metrics, which could cut off glyphs below the box. File titles and extension badges now use the regular system font (notes alone retain Songti) and draw a single Core Text line. Truncation uses CTLineCreateTruncatedLine with an ellipsis token; positioning uses actual glyph bounds inside the existing full footer row. The fixed preview rectangle and saved size preference are preserved.
+
+Deletion animation used CaptureFlight's separate hardcoded silver CAGradientLayer pin. Live PeggedView and CaptureFlight now receive one shared Pegged.clipKind. The flight layer snapshots that same SwiftUI Clothespin with ImageRenderer at the screen backing scale, including padding for its shadow, and uses the original attachment height. Both flying and falling paths receive the item's kind, so no default-type substitution occurs when the live view hands off to animation.
+
+No test programs/scripts were added or run. Source diff review completed; this Linux workspace cannot compile AppKit/SwiftUI, so full build and visual confirmation still require the Mac build script.
+
+## Restrained clip silhouettes (2026-10-29)
+
+Narrowed binder/bulldog bodies from roughly 24/30 to 16/20 points. The binder now has one simple thin wire loop and a small rounded body; the bulldog has one narrow arch, a tiny eye and a single jaw. Removed layered handle strokes, flange embossing and stacked highlights. Warm/cool metal stops are close to the original neutral silver. Both preserve the 26-point attachment height and shared clipKind animation rendering. No test scripts were added or run; Mac build/visual verification is still pending.

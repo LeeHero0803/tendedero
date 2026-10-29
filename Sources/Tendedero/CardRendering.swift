@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 
 /// An opaque paper card. Only overflowing text fades; the paper stays legible.
 func makeNoteCard(_ url: URL, scale: CGFloat = 1, dark: Bool = false) -> NSImage? {
@@ -85,7 +86,7 @@ func makeNoteCard(_ url: URL, scale: CGFloat = 1, dark: Bool = false) -> NSImage
 func makeFileCard(_ url: URL, dark: Bool, preview: NSImage? = nil) -> NSImage {
     let size = NSSize(width: 320, height: 246)
     let artwork = preview ?? NSWorkspace.shared.icon(forFile: url.path)
-    let font = CardTypography.font()
+    let font = CardTypography.fileFont()
     let label = CardTypography.fileLabel(url)
     return NSImage(size: size, flipped: false) { rect in
         (dark ? NSColor(white: 0.17, alpha: 1) : NSColor(white: 0.96, alpha: 1)).setFill()
@@ -112,9 +113,8 @@ func makeFileCard(_ url: URL, dark: Bool, preview: NSImage? = nil) -> NSImage {
         ]
         let title = label.name.components(separatedBy: .newlines).joined(separator: " ")
             .replacingOccurrences(of: "\t", with: " ")
-        let titleHeight = ceil(font.ascender - font.descender + font.leading)
         let titleWidth = ceil((title as NSString).size(withAttributes: titleAttributes).width)
-        let tagFont = CardTypography.font(canvasWidth: 320 * 0.65)
+        let tagFont = CardTypography.fileFont(scale: 0.65)
         let tagStyle = CardTypography.paragraph(centered: true)
         tagStyle.lineBreakMode = .byTruncatingTail
         tagStyle.lineSpacing = 0
@@ -130,11 +130,40 @@ func makeFileCard(_ url: URL, dark: Bool, preview: NSImage? = nil) -> NSImage {
             let tagRect = NSRect(x: left, y: row.midY - tagHeight / 2, width: tagWidth, height: tagHeight)
             (dark ? NSColor(white: 1, alpha: 0.09) : NSColor(white: 0, alpha: 0.06)).setFill()
             NSBezierPath(roundedRect: tagRect, xRadius: tagHeight / 2, yRadius: tagHeight / 2).fill()
-            (tag as NSString).draw(in: tagRect.insetBy(dx: 9, dy: 4), withAttributes: tagAttributes)
+            drawFileLine(tag, font: tagFont, color: foreground.withAlphaComponent(0.85),
+                         in: tagRect.insetBy(dx: 9, dy: 0), centered: true)
         }
-        let titleRect = NSRect(x: left + tagWidth + gap, y: row.midY - titleHeight / 2,
-                               width: groupWidth - tagWidth - gap, height: titleHeight)
-        (title as NSString).draw(in: titleRect, withAttributes: titleAttributes)
+        let titleRect = NSRect(x: left + tagWidth + gap, y: row.minY,
+                               width: groupWidth - tagWidth - gap, height: row.height)
+        drawFileLine(title, font: font, color: foreground, in: titleRect)
         return true
     }
+}
+
+/// Draw one line using actual glyph bounds, rather than clipping to nominal
+/// font metrics (which can cut off Chinese fallback glyphs and descenders).
+private func drawFileLine(_ text: String, font: NSFont, color: NSColor,
+                          in rect: NSRect, centered: Bool = false) {
+    guard rect.width > 0, rect.height > 0, let cg = NSGraphicsContext.current?.cgContext else { return }
+    let attributes: [NSAttributedString.Key: Any] = [
+        NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName(font.fontName as CFString, font.pointSize, nil),
+        NSAttributedString.Key(kCTForegroundColorAttributeName as String): color.cgColor,
+    ]
+    let original = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes) as CFAttributedString)
+    let token = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: attributes) as CFAttributedString)
+    let line: CTLine
+    if CTLineGetTypographicBounds(original, nil, nil, nil) > Double(rect.width) {
+        guard let truncated = CTLineCreateTruncatedLine(original, Double(rect.width), .end, token) else { return }
+        line = truncated
+    } else {
+        line = original
+    }
+    let bounds = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+    cg.saveGState()
+    defer { cg.restoreGState() }
+    cg.clip(to: rect)
+    cg.textMatrix = .identity
+    cg.textPosition = CGPoint(x: centered ? rect.midX - bounds.midX : rect.minX - bounds.minX,
+                              y: rect.midY - bounds.midY)
+    CTLineDraw(line, cg)
 }

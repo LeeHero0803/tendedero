@@ -1,5 +1,6 @@
 import AppKit
 import QuartzCore
+import SwiftUI
 
 /// Reads where on screen a screenshot was taken. macOS stores the captured
 /// area on the file, in global points with the origin at the top left of
@@ -38,7 +39,7 @@ final class CaptureFlight {
     private let edge = CAGradientLayer()
     private let edgeMask = CAShapeLayer()
     private let photo = CALayer()
-    private let clip = CAGradientLayer()
+    private let clip = CALayer()
 
     private let from: CGRect
     private let to: CGRect
@@ -59,9 +60,9 @@ final class CaptureFlight {
     ///   - from: the captured area, in screen coordinates.
     ///   - to: the card's frame on the line, in screen coordinates, unrotated.
     ///   - tilt: the card's resting tilt in degrees, clockwise, as SwiftUI uses.
-    static func fly(image: CGImage, from: CGRect, to: CGRect, tilt: CGFloat, on screen: NSScreen,
+    static func fly(image: CGImage, from: CGRect, to: CGRect, tilt: CGFloat, clipKind: Clothespin.Kind = .image, on screen: NSScreen,
                     completion: @escaping () -> Void) {
-        let flight = CaptureFlight(image: image, from: from, to: to, tilt: tilt, screen: screen)
+        let flight = CaptureFlight(image: image, from: from, to: to, tilt: tilt, clipKind: clipKind, screen: screen)
         current.append(flight)
         flight.completion = { [weak flight] in
             completion()
@@ -73,8 +74,8 @@ final class CaptureFlight {
     /// A discarded card falling off the line, drawn over the whole screen so
     /// it is never cut by the line's strip. Same motion as the app always had:
     /// 520 points down, tilting further, fading, 0.55 s ease in.
-    static func fall(image: CGImage, card: CGRect, tilt: CGFloat, on screen: NSScreen) {
-        let flight = CaptureFlight(image: image, from: card, to: card, tilt: tilt, screen: screen)
+    static func fall(image: CGImage, card: CGRect, tilt: CGFloat, clipKind: Clothespin.Kind = .image, on screen: NSScreen) {
+        let flight = CaptureFlight(image: image, from: card, to: card, tilt: tilt, clipKind: clipKind, screen: screen)
         flight.falling = true
         flight.duration = 0.55
         current.append(flight)
@@ -82,7 +83,7 @@ final class CaptureFlight {
         flight.run()
     }
 
-    private init(image: CGImage, from: CGRect, to: CGRect, tilt: CGFloat, screen: NSScreen) {
+    private init(image: CGImage, from: CGRect, to: CGRect, tilt: CGFloat, clipKind: Clothespin.Kind, screen: NSScreen) {
         self.from = from
         self.to = to
         self.tilt = tilt
@@ -119,13 +120,12 @@ final class CaptureFlight {
         photo.masksToBounds = true
         photo.contentsScale = scale
 
-        clip.colors = [NSColor(white: 0.70, alpha: 1).cgColor, NSColor(white: 0.93, alpha: 1).cgColor,
-                       NSColor(white: 0.82, alpha: 1).cgColor, NSColor(white: 0.62, alpha: 1).cgColor]
-        clip.locations = [0, 0.35, 0.65, 1]
-        clip.startPoint = CGPoint(x: 0, y: 0.5); clip.endPoint = CGPoint(x: 1, y: 0.5)
-        clip.cornerRadius = 3.5
-        clip.borderColor = NSColor(white: 1, alpha: 0.7).cgColor
-        clip.borderWidth = 0.6
+        // Snapshot the same SwiftUI clip used on the line, including its metal
+        // tone and shadow, instead of substituting the old default silver pin.
+        let renderer = ImageRenderer(content: Clothespin(kind: clipKind).padding(4))
+        renderer.scale = scale
+        clip.contents = renderer.cgImage
+        clip.contentsGravity = .resizeAspect
 
         for layer in [container, glass, edge, photo, clip] as [CALayer] { layer.contentsScale = scale }
         container.addSublayer(glass)
@@ -216,8 +216,9 @@ final class CaptureFlight {
         edge.opacity = chrome
         photo.frame = container.bounds.insetBy(dx: inset, dy: inset)
         photo.cornerRadius = max(0, radius - inset)
-        // The clip grips the top edge: 26 points tall, 12 of them over the card.
-        clip.frame = CGRect(x: w / 2 - 4.5, y: h - 12, width: 9, height: 26)
+        // 34x26 clip plus four points of transparent padding for its shadow.
+        // The unpadded clip still overlaps the card by exactly 12 points.
+        clip.frame = CGRect(x: w / 2 - 21, y: h - 16, width: 42, height: 34)
         clip.opacity = chrome
         CATransaction.commit()
     }
