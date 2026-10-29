@@ -74,9 +74,14 @@ for size in CardTypography.Size.allCases {
             guard let cg = card.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
                 fatalError("File card rendering failed")
             }
-            assert(cg.width == 320 && cg.height == 246)
+            // NSImage dimensions are points; its CGImage may be Retina pixels.
+            assert(card.size == NSSize(width: 320, height: 246))
+            let scaleX = CGFloat(cg.width) / card.size.width
+            let scaleY = CGFloat(cg.height) / card.size.height
+            assert(scaleX > 0 && abs(scaleX - scaleY) < 0.01,
+                   "Raster must preserve the logical card aspect ratio")
             let rep = NSBitmapImageRep(cgImage: cg)
-            let color = rep.colorAt(x: 160, y: 123)?.usingColorSpace(.deviceRGB)
+            let color = rep.colorAt(x: Int(160 * scaleX), y: Int(123 * scaleY))?.usingColorSpace(.deviceRGB)
             assert((color?.redComponent ?? 0) > 0.95 && (color?.greenComponent ?? 1) < 0.05,
                    "Fixed preview area must not move with font size or filename length")
         }

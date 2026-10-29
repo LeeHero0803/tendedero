@@ -97,3 +97,7 @@ Moved actual note/file rendering to CardRendering.swift, compiled with CardTypog
 ## Grouped menu (2026-10-29)
 
 Top-level actions remain Show/Hide, Take everything down and Quit. Preferences are grouped as Collect content (screenshot handling, copied images/text/files and watched folders), Display and triggers (hover, trigger area, new-item peeks, full-screen and shortcut), Card appearance (text size and card size), History and files (capacity, open screenshot folder), Application options (sounds, login, update link). Existing closures, settings keys, checkmarks and enablement guards are preserved. Parent menus disable automatic item validation so explicitly disabled entries remain disabled. Manual Mac checks: all groups open; toggles/checkmarks persist; folder limit/disabled clear and current-shortcut entry behave as before. Static checks only here.
+
+## Retina-aware render assertion (2026-10-29)
+
+The user's latest log passes transfer/watcher tests, then fails Tests/CardTypography/main.swift:77. The old assertion incorrectly equated NSImage's 320x246 logical points with the pixel dimensions of a CGImage selected by AppKit. Keep asserting the logical size, check that raster scale is positive and uniform, and scale the preview sampling coordinates to actual pixels. Production drawing code is unchanged. Static diff/shell checks passed; the corrected regression suite still requires a Mac rerun.
