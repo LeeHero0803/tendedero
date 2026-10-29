@@ -806,6 +806,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         keepItem.submenu = keeps
         menu.addItem(keepItem)
 
+        let textSizeItem = NSMenuItem(title: L("Card text size"), action: nil, keyEquivalent: "")
+        let textSizes = NSMenu()
+        let textChoices: [(CardTypography.Size, String)] = [
+            (.small, L("Small")), (.medium, L("Medium")),
+            (.large, L("Large")), (.extraLarge, L("Extra large")),
+        ]
+        for (size, title) in textChoices {
+            let choice = ClosureMenuItem(title) { [weak self] in
+                CardTypography.size = size
+                self?.line.reloadThumbnails()
+            }
+            choice.state = CardTypography.size == size ? .on : .off
+            textSizes.addItem(choice)
+        }
+        textSizeItem.submenu = textSizes
+        menu.addItem(textSizeItem)
+
         let sizeItem = NSMenuItem(title: L("Size"), action: nil, keyEquivalent: "")
         let sizes = NSMenu()
         for (size, title) in [(Layout.Size.small, L("Small")), (.medium, L("Medium")), (.large, L("Large"))] {

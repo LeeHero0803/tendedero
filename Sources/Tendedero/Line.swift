@@ -454,11 +454,11 @@ func makeNoteCard(_ url: URL, scale: CGFloat = 1, dark: Bool = false) -> NSImage
           : NSColor(srgbRed: 0.995, green: 0.985, blue: 0.95, alpha: 1)).setFill()
     NSRect(x: 0, y: 0, width: width, height: height).fill()
 
-    let style = NSMutableParagraphStyle()
-    style.lineBreakMode = .byWordWrapping
-    style.lineSpacing = 6 * scale
+    let canvasScale = CGFloat(width) / 320
+    let style = CardTypography.paragraph(scale: canvasScale)
+    let font = CardTypography.font(canvasWidth: CGFloat(width))
     let attributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: 72 * scale, weight: .medium),
+        .font: font,
         .foregroundColor: NSColor(white: dark ? 0.92 : 0.13, alpha: 1),
         .paragraphStyle: style,
     ]
@@ -471,7 +471,6 @@ func makeNoteCard(_ url: URL, scale: CGFloat = 1, dark: Bool = false) -> NSImage
     let box = NSRect(x: pad, y: (CGFloat(height) - textHeight) / 2, width: textWidth, height: textHeight)
 
     // Quiet ruled paper; align the first rule to the centered text block.
-    let font = NSFont.systemFont(ofSize: 72 * scale, weight: .medium)
     let lineHeight = font.ascender - font.descender + font.leading + style.lineSpacing
     let rules = NSBezierPath()
     rules.lineWidth = max(1, 2 * scale)
@@ -498,24 +497,34 @@ func makeNoteCard(_ url: URL, scale: CGFloat = 1, dark: Bool = false) -> NSImage
 func makeFileCard(_ url: URL, dark: Bool, preview: NSImage? = nil) -> NSImage {
     let size = NSSize(width: 320, height: 246)
     let artwork = preview ?? NSWorkspace.shared.icon(forFile: url.path)
+    let font = CardTypography.font()
+    let label = CardTypography.fileLabel(url)
     return NSImage(size: size, flipped: false) { rect in
         (dark ? NSColor(white: 0.17, alpha: 1) : NSColor(white: 0.96, alpha: 1)).setFill()
         rect.fill()
-        let style = NSMutableParagraphStyle()
-        style.alignment = .center
-        style.lineBreakMode = .byTruncatingMiddle
+        let style = CardTypography.paragraph(centered: true)
+        let foreground = NSColor(white: dark ? 0.92 : 0.13, alpha: 1)
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 20, weight: .medium),
-            .foregroundColor: NSColor(white: dark ? 0.92 : 0.13, alpha: 1),
+            .font: font,
+            .foregroundColor: foreground,
             .paragraphStyle: style,
         ]
-        // Center the complete artwork + gap + filename group, not just the icon.
-        let titleHeight: CGFloat = 26
-        let gap: CGFloat = 14
-        let artworkHeight: CGFloat = preview == nil ? 88 : 146
-        let groupHeight = artworkHeight + gap + titleHeight
+        let title = NSAttributedString(string: label.name, attributes: attributes)
+        let lineHeight = ceil(font.ascender - font.descender + font.leading + style.lineSpacing)
+        let measured = title.boundingRect(with: NSSize(width: 288, height: .greatestFiniteMagnitude),
+                                           options: [.usesLineFragmentOrigin, .usesFontLeading]).height
+        let titleHeight = min(lineHeight * 2, max(lineHeight, ceil(measured)))
+        let tagFont = NSFont.monospacedSystemFont(ofSize: font.pointSize * 0.65, weight: .semibold)
+        let tagHeight: CGFloat = label.tag == nil ? 0 : ceil(tagFont.ascender - tagFont.descender + tagFont.leading) + 8
+        let tagGap: CGFloat = label.tag == nil ? 0 : 8
+        let artworkGap: CGFloat = 12
+        // Reserve text first; larger font choices reduce artwork instead of clipping text.
+        let artworkHeight = min(preview == nil ? 88 : 146,
+            max(32, size.height - 32 - titleHeight - tagHeight - tagGap - artworkGap))
+        let groupHeight = artworkHeight + artworkGap + titleHeight + tagGap + tagHeight
         let bottom = (size.height - groupHeight) / 2
-        let slot = NSRect(x: 20, y: bottom + titleHeight + gap, width: 280, height: artworkHeight)
+        let titleBottom = bottom + tagHeight + tagGap
+        let slot = NSRect(x: 20, y: titleBottom + titleHeight + artworkGap, width: 280, height: artworkHeight)
         let ratio = min(slot.width / max(1, artwork.size.width), slot.height / max(1, artwork.size.height))
         let drawingSize = NSSize(width: artwork.size.width * ratio, height: artwork.size.height * ratio)
         let drawingRect = NSRect(x: slot.midX - drawingSize.width / 2, y: slot.midY - drawingSize.height / 2,
@@ -524,7 +533,20 @@ func makeFileCard(_ url: URL, dark: Bool, preview: NSImage? = nil) -> NSImage {
         NSBezierPath(roundedRect: drawingRect, xRadius: preview == nil ? 0 : 6, yRadius: preview == nil ? 0 : 6).addClip()
         artwork.draw(in: drawingRect)
         NSGraphicsContext.restoreGraphicsState()
-        (url.lastPathComponent as NSString).draw(in: NSRect(x: 16, y: bottom, width: 288, height: titleHeight), withAttributes: attributes)
+        title.draw(with: NSRect(x: 16, y: titleBottom, width: 288, height: titleHeight),
+                   options: [.usesLineFragmentOrigin, .usesFontLeading, .truncatesLastVisibleLine])
+        if let tag = label.tag {
+            let tagStyle = CardTypography.paragraph(centered: true)
+            tagStyle.lineBreakMode = .byTruncatingMiddle
+            let tagAttributes: [NSAttributedString.Key: Any] = [
+                .font: tagFont, .foregroundColor: foreground.withAlphaComponent(0.85), .paragraphStyle: tagStyle,
+            ]
+            let tagWidth = min(288, ceil((tag as NSString).size(withAttributes: tagAttributes).width) + 18)
+            let tagRect = NSRect(x: (size.width - tagWidth) / 2, y: bottom, width: tagWidth, height: tagHeight)
+            (dark ? NSColor(white: 1, alpha: 0.09) : NSColor(white: 0, alpha: 0.06)).setFill()
+            NSBezierPath(roundedRect: tagRect, xRadius: tagHeight / 2, yRadius: tagHeight / 2).fill()
+            (tag as NSString).draw(in: tagRect.insetBy(dx: 9, dy: 4), withAttributes: tagAttributes)
+        }
         return true
     }
 }
