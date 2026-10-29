@@ -465,7 +465,7 @@ func makeNoteCard(_ url: URL, scale: CGFloat = 1, dark: Bool = false) -> NSImage
     let content = NSAttributedString(string: text, attributes: attributes)
     let availableHeight = CGFloat(height) - pad * 2
     let textWidth = CGFloat(width) - pad * 2
-    let measured = content.boundingRect(with: NSSize(width: textWidth, height: .greatestFiniteMagnitude),
+    let measured = content.boundingRect(with: NSSize(width: textWidth, height: CGFloat.greatestFiniteMagnitude),
                                         options: [.usesLineFragmentOrigin, .usesFontLeading]).height
     let textHeight = min(availableHeight, ceil(measured))
     let box = NSRect(x: pad, y: (CGFloat(height) - textHeight) / 2, width: textWidth, height: textHeight)
@@ -511,7 +511,7 @@ func makeFileCard(_ url: URL, dark: Bool, preview: NSImage? = nil) -> NSImage {
         ]
         let title = NSAttributedString(string: label.name, attributes: attributes)
         let lineHeight = ceil(font.ascender - font.descender + font.leading + style.lineSpacing)
-        let measured = title.boundingRect(with: NSSize(width: 288, height: .greatestFiniteMagnitude),
+        let measured = title.boundingRect(with: NSSize(width: 288, height: CGFloat.greatestFiniteMagnitude),
                                            options: [.usesLineFragmentOrigin, .usesFontLeading]).height
         let titleHeight = min(lineHeight * 2, max(lineHeight, ceil(measured)))
         let tagFont = NSFont.monospacedSystemFont(ofSize: font.pointSize * 0.65, weight: .semibold)
