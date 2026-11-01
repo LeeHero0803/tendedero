@@ -1,0 +1,45 @@
+name: Build macOS development
+
+on:
+  push:
+    branches: [feature/universal-clipboard]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-development-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Identify development build
+        id: version
+        run: |
+          label="1.6.1-dev.${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}"
+          echo "label=$label" >> "$GITHUB_OUTPUT"
+      - name: Build and package universal app
+        env:
+          PACKAGE_LABEL: ${{ steps.version.outputs.label }}
+          BUILD_CHANNEL: development
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: scripts/package-release.sh 1.6.1
+      - uses: actions/upload-artifact@v4
+        id: artifact
+        with:
+          name: Lineboard-${{ steps.version.outputs.label }}-universal
+          path: build/release/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Add download summary
+        env:
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+        run: |
+          printf '### Lineboard development build\n\n[Download DMG, App ZIP and checksums](%s)\n\nSource commit: `%s`\n\nDevelopment build; no Release was created or changed. Artifacts expire after 30 days.\n' "$ARTIFACT_URL" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"

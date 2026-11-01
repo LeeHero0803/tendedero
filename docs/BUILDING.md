@@ -52,7 +52,24 @@ open build/Tendedero.app
 
 ## 发布与校验
 
-仓库的 `Build macOS release` GitHub Actions 工作流运行于 macOS runner，执行相同的打包脚本，上传工作流产物并准备 `lineboard-v1.6.0` Release 草稿。构建失败时不产生可发布的安装包。维护者在 Releases 页面确认附件后发布草稿；功能分支上的工作流通过相关构建文件变更触发。
+### 日常构建
+
+每次向 `feature/universal-clipboard` 上传提交，`Build macOS development` 工作流都会在 macOS runner 上编译 Apple Silicon＋Intel 通用版，并生成 DMG、App ZIP、校验文件和源码提交信息；不运行测试。
+
+打开仓库 [Actions](https://github.com/LeeHero0803/tendedero/actions)，选择最新成功的 `Build macOS development` 记录，在页面底部 **Artifacts** 下载产物（需要登录 GitHub），解压后即可取得 DMG 或 App ZIP。产物保留 30 天，文件名含 `dev`、构建序号与提交号；`build-info.json` 的 `channel` 为 `development`。它不会创建或修改 Release。当前开发包的应用版本基线为 `1.6.1`，定义在 `.github/workflows/build.yml` 中。
+
+### 正式发布
+
+确认某次提交可发布后，为该提交推送一个新的版本标签，例如：
+
+```bash
+git tag -a lineboard-v1.6.1 <已确认的完整提交号> -m "Lineboard 1.6.1"
+git push origin lineboard-v1.6.1
+```
+
+`Prepare macOS release` 仅在推送 `lineboard-v主版本.次版本.修订号` 标签时运行，按标签构建并创建带附件的 Release 草稿。维护者检查后在 Releases 页面点击 **Publish release** 正式发布。如果存在 `docs/releases/版本号.md`，将使用该文件作更新说明，否则自动生成。普通分支提交不会触发正式发布。
+
+每个版本使用新标签；已存在的 Release 会让流程停止，附件不会被覆盖。发布后继续开发时，应更新开发工作流的版本基线。构建失败时不创建 Release。
 
 下载后可在附件所在目录执行：
 

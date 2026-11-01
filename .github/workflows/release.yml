@@ -1,18 +1,16 @@
-name: Build macOS release
+name: Prepare macOS release
+
 on:
   push:
-    branches: [feature/universal-clipboard]
-    paths:
-      - '.github/workflows/release.yml'
-      - 'scripts/package-release.sh'
-      - 'scripts/make-lineboard-icon.swift'
-      - 'docs/releases/1.6.0.md'
-  workflow_dispatch:
+    tags: ['lineboard-v*']
+
 permissions:
   contents: write
+
 concurrency:
-  group: macos-release
+  group: macos-release-${{ github.ref }}
   cancel-in-progress: false
+
 jobs:
   release:
     runs-on: macos-15
@@ -21,26 +19,45 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Build and package universal app
-        run: |
-          xcodebuild -version
-          swift --version
-          scripts/package-release.sh 1.6.0
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Lineboard-1.6.0-universal
-          path: build/release/*
-          if-no-files-found: error
-          retention-days: 30
-      - name: Prepare draft release with assets
+      - name: Validate version and protect existing release
+        id: version
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          tag=lineboard-v1.6.0
-          if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --draft --target "$GITHUB_SHA" \
-              --title "Lineboard 1.6.0 · 通用剪贴板晾衣绳" \
-              --notes-file docs/releases/1.6.0.md
+          version="${GITHUB_REF_NAME#lineboard-v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'Tag must be lineboard-vMAJOR.MINOR.PATCH' >&2
+            exit 1
           fi
-          gh release upload "$tag" build/release/* --clobber
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo 'Release already exists; use a new version. Existing assets will not be overwritten.' >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Build and package universal app
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_CHANNEL: release
+        run: scripts/package-release.sh "$RELEASE_VERSION"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lineboard-${{ steps.version.outputs.version }}-universal
+          path: build/release/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Create a new release draft with assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          notes="docs/releases/$RELEASE_VERSION.md"
+          args=(--generate-notes)
+          if [[ -f "$notes" ]]; then
+            args=(--notes-file "$notes")
+          fi
+          gh release create "$GITHUB_REF_NAME" build/release/* \
+            --draft --verify-tag \
+            --title "Lineboard $RELEASE_VERSION · 通用剪贴板晾衣绳" \
+            "${args[@]}"

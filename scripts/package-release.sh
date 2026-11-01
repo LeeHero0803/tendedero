@@ -7,10 +7,15 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "Version must be major.minor.patch" >&2
   exit 1
 fi
+PACKAGE_LABEL="${PACKAGE_LABEL:-$VERSION}"
+if [[ ! "$PACKAGE_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9.+-]*$ ]]; then
+  echo "Package label must use letters, digits, dots, plus or minus" >&2
+  exit 1
+fi
 export APP_NAME=Lineboard
 export APP_ICON_SCRIPT=scripts/make-lineboard-icon.swift
 export VERSION_OVERRIDE="$VERSION"
-export BUILD_NUMBER=160
+export BUILD_NUMBER="${BUILD_NUMBER:-${VERSION//./}}"
 scripts/build-app.sh release
 APP="build/Lineboard.app"
 cp LICENSE "$APP/Contents/Resources/LICENSE"
@@ -20,8 +25,8 @@ codesign --verify --deep --strict "$APP"
 lipo "$APP/Contents/MacOS/Tendedero" -verify_arch arm64 x86_64
 OUT="build/release"
 mkdir -p "$OUT"
-ZIP="Lineboard-$VERSION-universal.app.zip"
-DMG="Lineboard-$VERSION-universal.dmg"
+ZIP="Lineboard-$PACKAGE_LABEL-universal.app.zip"
+DMG="Lineboard-$PACKAGE_LABEL-universal.dmg"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT/$ZIP"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
@@ -40,10 +45,14 @@ TXT
 rm -f "$OUT/$DMG"
 hdiutil create -quiet -volname Lineboard -srcfolder "$STAGE" -fs HFS+ -format UDZO "$OUT/$DMG"
 export LINEBOARD_RELEASE_VERSION="$VERSION"
+export LINEBOARD_PACKAGE_LABEL="$PACKAGE_LABEL"
+export BUILD_CHANNEL="${BUILD_CHANNEL:-release}"
 python3 - <<'PY'
 import json, os, subprocess
 from pathlib import Path
 info={"product":"Lineboard","version":os.environ["LINEBOARD_RELEASE_VERSION"],
+      "package_label":os.environ["LINEBOARD_PACKAGE_LABEL"],
+      "channel":os.environ["BUILD_CHANNEL"],
       "source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
       "architectures":["arm64","x86_64"],"minimum_macos":"14.0",
       "signing":"ad-hoc","notarized":False}
