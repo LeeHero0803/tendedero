@@ -32,10 +32,9 @@ func makeNoteCard(_ url: URL, scale: CGFloat = 1, dark: Bool = false, webPreview
     ])
     let availableHeight = CGFloat(height) - pad * 2
     let textWidth = CGFloat(width) - pad * 2
-    let measured = content.boundingRect(with: NSSize(width: textWidth, height: CGFloat.greatestFiniteMagnitude),
-                                        options: [.usesLineFragmentOrigin, .usesFontLeading]).height
-    let overflows = data.count > previewLimit || ceil(measured) > availableHeight
-    let textHeight = min(availableHeight, ceil(measured))
+    let limited = limitedCardText(content, width: textWidth, height: availableHeight, maxLines: 5)
+    let overflows = data.count > previewLimit || limited.overflows
+    let textHeight = min(availableHeight, ceil(limited.height))
     let box = NSRect(x: pad, y: (CGFloat(height) - textHeight) / 2, width: textWidth, height: textHeight)
 
     let lineHeight = font.ascender - font.descender + font.leading + style.lineSpacing
@@ -71,7 +70,7 @@ func makeNoteCard(_ url: URL, scale: CGFloat = 1, dark: Bool = false, webPreview
     cg.clip(to: box)
     cg.beginTransparencyLayer(auxiliaryInfo: nil)
     // No ellipsis on notes: the bottom fade communicates continuation instead.
-    content.draw(with: box, options: [.usesLineFragmentOrigin, .usesFontLeading])
+    limited.content.draw(with: box, options: [.usesLineFragmentOrigin, .usesFontLeading])
     if overflows {
         let fadeHeight = min(box.height, lineHeight * 1.4)
         if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
@@ -165,14 +164,17 @@ private func drawWebNote(_ text: String, address: URL, preview: WebPreview?,
     // File icons start 28 points below the paper edge, plus about 14 points
     // of transparent icon artwork. Align the URL's visible glyphs to that edge.
     let topInset = 42 * unit
-    let urlRow = NSRect(x: pad, y: height - topInset - rowHeight,
-                        width: width - pad * 2, height: rowHeight)
-    drawFileLine(text, font: font, color: foreground, in: urlRow, topAligned: true)
+    let urlHeight = rowHeight * 2 + rowGap
+    let urlRow = NSRect(x: pad, y: height - topInset - urlHeight,
+                        width: width - pad * 2, height: urlHeight)
+    drawTwoLineCardText(text, font: font, color: foreground, in: urlRow, rowHeight: rowHeight, gap: rowGap)
 
     // Equal side/bottom insets, with concentric corners matching the paper edge.
     let contentHeight = max(34 * unit, rowHeight * 2 + rowGap)
+    let verticalPadding = min(contentPadding,
+        max(4 * unit, (urlRow.minY - 16 * unit - pad - contentHeight) / 2))
     let slip = NSRect(x: pad, y: pad, width: width - pad * 2,
-                      height: contentHeight + contentPadding * 2)
+                      height: contentHeight + verticalPadding * 2)
     let displayScale = min((Layout.cardWidth - 14) / width, Layout.photoMaxHeight / height)
     let paperRadius = (Frame.radius - Frame.inset) / max(0.001, displayScale)
     let slipRadius = max(0, paperRadius - pad)
@@ -208,16 +210,18 @@ private func drawWebNote(_ text: String, address: URL, preview: WebPreview?,
     let textX = iconBox.maxX + contentPadding
     let textWidth = slip.maxX - textX - contentPadding
     let title = preview?.title ?? address.host ?? address.absoluteString
-    let summary: String
-    if let preview {
-        summary = preview.summary.isEmpty ? "暂无网页介绍" : preview.summary
+    let summary = preview?.summary.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if summary.isEmpty {
+        drawTwoLineCardText(title, font: font, color: foreground,
+                            in: NSRect(x: textX, y: slip.midY - contentHeight / 2,
+                                       width: textWidth, height: contentHeight), rowHeight: rowHeight, gap: rowGap,
+                            verticallyCentered: true)
     } else {
-        summary = "正在读取网页信息…"
+        drawFileLine(title, font: font, color: foreground,
+                     in: NSRect(x: textX, y: slip.midY + rowGap / 2, width: textWidth, height: rowHeight))
+        drawFileLine(summary, font: font, color: foreground.withAlphaComponent(0.62),
+                     in: NSRect(x: textX, y: slip.midY - rowGap / 2 - rowHeight, width: textWidth, height: rowHeight))
     }
-    drawFileLine(title, font: font, color: foreground,
-                 in: NSRect(x: textX, y: slip.midY + rowGap / 2, width: textWidth, height: rowHeight))
-    drawFileLine(summary, font: font, color: foreground.withAlphaComponent(0.62),
-                 in: NSRect(x: textX, y: slip.midY - rowGap / 2 - rowHeight, width: textWidth, height: rowHeight))
 
     // A small translucent strip straddles the paper attachment's upper edge.
     let tapeRect = NSRect(x: slip.midX - 24 * unit, y: slip.maxY - 8 * unit,
@@ -228,6 +232,47 @@ private func drawWebNote(_ text: String, address: URL, preview: WebPreview?,
     NSColor(white: dark ? 1 : 0.45, alpha: dark ? 0.10 : 0.12).setStroke()
     tape.lineWidth = 0.5 * unit
     tape.stroke()
+}
+
+/// Use the text system's line boundaries, rather than clipping a sixth line halfway.
+private func limitedCardText(_ content: NSAttributedString, width: CGFloat, height: CGFloat,
+                             maxLines: Int) -> (content: NSAttributedString, height: CGFloat, ranges: [NSRange], overflows: Bool) {
+    let storage = NSTextStorage(attributedString: content)
+    let manager = NSLayoutManager()
+    let container = NSTextContainer(containerSize: NSSize(width: width, height: height))
+    container.lineFragmentPadding = 0
+    container.maximumNumberOfLines = maxLines
+    container.lineBreakMode = .byCharWrapping
+    storage.addLayoutManager(manager)
+    manager.addTextContainer(container)
+    manager.ensureLayout(for: container)
+    let glyphs = manager.glyphRange(for: container)
+    var ranges: [NSRange] = []
+    manager.enumerateLineFragments(forGlyphRange: glyphs) { _, _, _, range, _ in
+        ranges.append(manager.characterRange(forGlyphRange: range, actualGlyphRange: nil))
+    }
+    let end = min(content.length, ranges.last.map { NSMaxRange($0) } ?? 0)
+    return (content.attributedSubstring(from: NSRange(location: 0, length: end)),
+            manager.usedRect(for: container).height, ranges, end < content.length)
+}
+
+/// Fill the first line before wrapping, with an ellipsis only on an overflowing second line.
+private func drawTwoLineCardText(_ text: String, font: NSFont, color: NSColor, in rect: NSRect,
+                                 rowHeight: CGFloat, gap: CGFloat, verticallyCentered: Bool = false) {
+    let paragraph = CardTypography.paragraph()
+    paragraph.lineSpacing = gap
+    let content = NSAttributedString(string: text, attributes: [.font: font, .paragraphStyle: paragraph])
+    let layout = limitedCardText(content, width: rect.width, height: CGFloat.greatestFiniteMagnitude, maxLines: 2)
+    let source = text as NSString
+    let blockHeight = CGFloat(layout.ranges.count) * rowHeight + CGFloat(max(0, layout.ranges.count - 1)) * gap
+    // URL rows start at the top. A short website name stays vertically centered in its paper slip.
+    let top = verticallyCentered ? rect.midY + blockHeight / 2 : rect.maxY
+    for (index, range) in layout.ranges.enumerated() {
+        let value = index == 1 && layout.overflows ? source.substring(from: range.location) : source.substring(with: range)
+        let lineRect = NSRect(x: rect.minX, y: top - CGFloat(index) * (rowHeight + gap) - rowHeight,
+                              width: rect.width, height: rowHeight)
+        drawFileLine(value.trimmingCharacters(in: .newlines), font: font, color: color, in: lineRect, topAligned: true)
+    }
 }
 
 /// Draw one line using actual glyph bounds, rather than clipping to nominal

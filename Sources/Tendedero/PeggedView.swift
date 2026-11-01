@@ -215,7 +215,7 @@ struct Clothespin: View {
             switch kind {
             case .image: photoPin
             case .text: binderClip
-            case .file: bulldogClip
+            case .file: photoPin
             }
         }
         .frame(width: 34, height: 26)
@@ -257,25 +257,6 @@ struct Clothespin: View {
         .frame(width: 34, height: 26)
     }
 
-    /// A narrow arched plate with a single eye; no extra chrome or embossing.
-    private var bulldogClip: some View {
-        ZStack(alignment: .topLeading) {
-            Path { p in
-                p.move(to: CGPoint(x: 7, y: 23))
-                p.addLine(to: CGPoint(x: 7, y: 17))
-                p.addQuadCurve(to: CGPoint(x: 12, y: 14), control: CGPoint(x: 7, y: 14))
-                p.addCurve(to: CGPoint(x: 22, y: 14), control1: CGPoint(x: 12, y: 4), control2: CGPoint(x: 22, y: 4))
-                p.addQuadCurve(to: CGPoint(x: 27, y: 17), control: CGPoint(x: 27, y: 14))
-                p.addLine(to: CGPoint(x: 27, y: 23))
-                p.closeSubpath()
-            }
-            .fill(metal)
-            Circle().fill(Color.black.opacity(0.35))
-                .frame(width: 2.5, height: 2.5).offset(x: 15.75, y: 10)
-            Capsule().fill(metal).frame(width: 20, height: 2).offset(x: 7, y: 23)
-        }
-        .frame(width: 34, height: 26)
-    }
 }
 
 extension Pegged {
