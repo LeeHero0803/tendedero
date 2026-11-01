@@ -110,8 +110,10 @@ func makeFileCard(_ url: URL, dark: Bool, preview: NSImage? = nil) -> NSImage {
         let drawingRect = NSRect(x: slot.midX - drawingSize.width / 2, y: slot.midY - drawingSize.height / 2,
                                  width: drawingSize.width, height: drawingSize.height)
         NSGraphicsContext.saveGraphicsState()
-        // Previews get icon-like corner proportions; system icons keep their own silhouette.
-        let radius = preview == nil ? 0 : min(drawingRect.width, drawingRect.height) * 0.22
+        // Keep preview corners fixed in displayed points, just below the outer frame's radius.
+        // System icons retain their own silhouette.
+        let displayScale = min((Layout.cardWidth - 14) / size.width, Layout.photoMaxHeight / size.height)
+        let radius = preview == nil ? 0 : (Frame.radius - 2) / max(0.001, displayScale)
         NSBezierPath(roundedRect: drawingRect, xRadius: radius, yRadius: radius).addClip()
         artwork.draw(in: drawingRect)
         NSGraphicsContext.restoreGraphicsState()
