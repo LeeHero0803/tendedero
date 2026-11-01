@@ -94,13 +94,13 @@ func makeFileCard(_ url: URL, dark: Bool, preview: NSImage? = nil) -> NSImage {
         let foreground = NSColor(white: dark ? 0.92 : 0.13, alpha: 1)
         // These bounds never depend on filename length, font size, or file type.
         let slot = NSRect(x: 20, y: 86, width: 280, height: 140)
-        let fitSlot = preview == nil ? slot.insetBy(dx: 0, dy: 26) : slot
-        let ratio = min(fitSlot.width / max(1, artwork.size.width), fitSlot.height / max(1, artwork.size.height))
+        let ratio = min(slot.width / max(1, artwork.size.width), slot.height / max(1, artwork.size.height))
         let drawingSize = NSSize(width: artwork.size.width * ratio, height: artwork.size.height * ratio)
-        let drawingRect = NSRect(x: fitSlot.midX - drawingSize.width / 2, y: fitSlot.midY - drawingSize.height / 2,
+        let drawingRect = NSRect(x: slot.midX - drawingSize.width / 2, y: slot.midY - drawingSize.height / 2,
                                  width: drawingSize.width, height: drawingSize.height)
         NSGraphicsContext.saveGraphicsState()
-        NSBezierPath(roundedRect: slot, xRadius: 6, yRadius: 6).addClip()
+        // Round the artwork's actual edges, including portrait document previews.
+        NSBezierPath(roundedRect: drawingRect, xRadius: 6, yRadius: 6).addClip()
         artwork.draw(in: drawingRect)
         NSGraphicsContext.restoreGraphicsState()
 
