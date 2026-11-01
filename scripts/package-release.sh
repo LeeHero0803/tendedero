@@ -28,12 +28,21 @@ mkdir -p "$OUT"
 ZIP="Lineboard-$PACKAGE_LABEL-universal.app.zip"
 DMG="Lineboard-$PACKAGE_LABEL-universal.dmg"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT/$ZIP"
-STAGE="$(mktemp -d)"
-trap 'rm -rf "$STAGE"' EXIT
+WORK="$(mktemp -d)"
+STAGE="$WORK/stage"
+MOUNT="$WORK/mount"
+cleanup() {
+  if mount | grep -Fq " on $MOUNT ("; then
+    hdiutil detach -quiet "$MOUNT" || hdiutil detach -force -quiet "$MOUNT" || true
+  fi
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
+mkdir -p "$STAGE/.background" "$STAGE/.info" "$MOUNT"
 ditto "$APP" "$STAGE/Lineboard.app"
 ln -s /Applications "$STAGE/Applications"
-cp LICENSE "$STAGE/LICENSE.txt"
-cat > "$STAGE/Read Me.txt" <<'TXT'
+cp LICENSE "$STAGE/.info/LICENSE.txt"
+cat > "$STAGE/.info/Read Me.txt" <<'TXT'
 Lineboard — independent universal clipboard fork of Tendedero.
 Requires macOS 14+, Apple Silicon or Intel. Drag Lineboard.app into Applications.
 Quit any running Tendedero/Lineboard before opening this version.
@@ -42,8 +51,52 @@ Use macOS Privacy & Security / Open Anyway only if you trust this repository.
 Settings and clipboard history use the existing bundle identifier for compatibility.
 Repository: https://github.com/LeeHero0803/tendedero
 TXT
+swift scripts/make-dmg-background.swift "$WORK/bg1x.png" 1
+swift scripts/make-dmg-background.swift "$WORK/bg2x.png" 2
+tiffutil -cathidpicheck "$WORK/bg1x.png" "$WORK/bg2x.png" \
+  -out "$STAGE/.background/background.tiff" >/dev/null
+
+# Store Finder's drag-to-install layout before compressing the disk image.
+RW="$WORK/rw.dmg"
+SIZE_MB="$(du -sm "$STAGE" | awk '{print $1 + 40}')"
+hdiutil create -quiet -srcfolder "$STAGE" -volname Lineboard -fs HFS+ \
+  -format UDRW -size "${SIZE_MB}m" "$RW"
+hdiutil attach -quiet -readwrite -noverify -noautoopen -nobrowse \
+  -mountpoint "$MOUNT" "$RW"
+osascript <<OSA
+with timeout of 120 seconds
+  set installFolder to POSIX file "$MOUNT" as alias
+  tell application "Finder"
+    open installFolder
+    set installWindow to container window of installFolder
+    set current view of installWindow to icon view
+    set toolbar visible of installWindow to false
+    set statusbar visible of installWindow to false
+    set bounds of installWindow to {200, 120, 800, 528}
+    set opts to icon view options of installWindow
+    set arrangement of opts to not arranged
+    set icon size of opts to 112
+    set text size of opts to 13
+    set background picture of opts to POSIX file "$MOUNT/.background/background.tiff" as alias
+    set position of item "Lineboard.app" of installFolder to {160, 178}
+    set position of item "Applications" of installFolder to {440, 178}
+    set bounds of installWindow to {200, 120, 800, 528}
+    update installFolder without registering applications
+    delay 1
+    set bounds of installWindow to {200, 120, 800, 528}
+    delay 1
+    close installWindow
+  end tell
+end timeout
+OSA
+sync
+if [[ ! -s "$MOUNT/.DS_Store" ]]; then
+  echo "Finder did not save the installer window layout" >&2
+  exit 1
+fi
+hdiutil detach -quiet "$MOUNT"
 rm -f "$OUT/$DMG"
-hdiutil create -quiet -volname Lineboard -srcfolder "$STAGE" -fs HFS+ -format UDZO "$OUT/$DMG"
+hdiutil convert -quiet "$RW" -format UDZO -imagekey zlib-level=9 -o "$OUT/$DMG"
 export LINEBOARD_RELEASE_VERSION="$VERSION"
 export LINEBOARD_PACKAGE_LABEL="$PACKAGE_LABEL"
 export BUILD_CHANNEL="${BUILD_CHANNEL:-release}"

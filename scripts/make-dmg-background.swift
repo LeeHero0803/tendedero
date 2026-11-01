@@ -4,6 +4,7 @@ import AppKit
 
 let out = CommandLine.arguments.dropFirst().first ?? "background.png"
 let scale = CGFloat(Double(CommandLine.arguments.dropFirst(2).first ?? "1") ?? 1)
+let appName = ProcessInfo.processInfo.environment["APP_NAME"] ?? "Tendedero"
 let W: CGFloat = 600, H: CGFloat = 380
 
 func color(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> NSColor {
@@ -47,7 +48,7 @@ head.lineJoinStyle = .round
 head.stroke()
 
 let style = NSMutableParagraphStyle(); style.alignment = .center
-let text = NSAttributedString(string: "Drag Tendedero to Applications", attributes: [
+let text = NSAttributedString(string: "Drag \(appName) to Applications", attributes: [
     .font: NSFont.systemFont(ofSize: 13, weight: .medium),
     .foregroundColor: color(80, 84, 100),
     .paragraphStyle: style,
