@@ -214,7 +214,7 @@ struct Clothespin: View {
         Group {
             switch kind {
             case .image: photoPin
-            case .text: wirePin
+            case .text: paperclipPin
             case .file: roundedEyePin
             }
         }
@@ -236,22 +236,29 @@ struct Clothespin: View {
             }
     }
 
-    /// G / Wire Pin: the same outer capsule becomes a fine wire loop and tiny jaw.
-    private var wirePin: some View {
-        ZStack(alignment: .bottom) {
-            RoundedRectangle(cornerRadius: 3.5, style: .continuous)
-                .strokeBorder(metal, lineWidth: 1.35)
-            Rectangle()
-                .fill(metal)
-                .frame(height: 5.5)
-                .overlay(alignment: .top) {
-                    Rectangle().fill(Color.white.opacity(0.45)).frame(height: 0.5)
-                }
-        }
+    /// A slender double-turn paperclip, with slightly thicker warm metal wire.
+    private var paperclipPin: some View {
+        paperclipWire
+            .stroke(metal, style: StrokeStyle(lineWidth: 1.7, lineCap: .round, lineJoin: .round))
+            .overlay(paperclipWire.stroke(Color.white.opacity(0.30),
+                                          style: StrokeStyle(lineWidth: 0.35, lineCap: .round, lineJoin: .round)))
         .frame(width: 9, height: 26)
-        .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 3.5, style: .continuous)
-            .strokeBorder(edge, lineWidth: 0.35))
+    }
+
+    private var paperclipWire: Path {
+        Path { p in
+            p.move(to: CGPoint(x: 5.8, y: 7))
+            p.addLine(to: CGPoint(x: 5.8, y: 19))
+            p.addCurve(to: CGPoint(x: 3.2, y: 19),
+                       control1: CGPoint(x: 5.8, y: 22.4), control2: CGPoint(x: 3.2, y: 22.4))
+            p.addLine(to: CGPoint(x: 3.2, y: 5))
+            p.addCurve(to: CGPoint(x: 8.15, y: 5),
+                       control1: CGPoint(x: 3.2, y: -0.533), control2: CGPoint(x: 8.15, y: -0.533))
+            p.addLine(to: CGPoint(x: 8.15, y: 21))
+            p.addCurve(to: CGPoint(x: 0.85, y: 21),
+                       control1: CGPoint(x: 8.15, y: 26.533), control2: CGPoint(x: 0.85, y: 26.533))
+            p.addLine(to: CGPoint(x: 0.85, y: 6.5))
+        }
     }
 
     /// I / Rounded Eye: one small round eye and short slot cut into the same body.
