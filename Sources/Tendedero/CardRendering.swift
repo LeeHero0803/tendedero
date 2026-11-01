@@ -248,27 +248,43 @@ private func limitedCardText(_ content: NSAttributedString, width: CGFloat, heig
     manager.ensureLayout(for: container)
     let glyphs = manager.glyphRange(for: container)
     var ranges: [NSRange] = []
-    manager.enumerateLineFragments(forGlyphRange: glyphs) { _, _, _, range, _ in
+    var usedHeight: CGFloat = 0
+    manager.enumerateLineFragments(forGlyphRange: glyphs) { fragment, _, _, range, stop in
+        guard ranges.count < maxLines, fragment.maxY <= height else {
+            stop.pointee = true
+            return
+        }
         ranges.append(manager.characterRange(forGlyphRange: range, actualGlyphRange: nil))
+        usedHeight = max(usedHeight, fragment.maxY)
     }
     let end = min(content.length, ranges.last.map { NSMaxRange($0) } ?? 0)
     return (content.attributedSubstring(from: NSRange(location: 0, length: end)),
-            manager.usedRect(for: container).height, ranges, end < content.length)
+            usedHeight, ranges, end < content.length)
 }
 
 /// Fill the first line before wrapping, with an ellipsis only on an overflowing second line.
 private func drawTwoLineCardText(_ text: String, font: NSFont, color: NSColor, in rect: NSRect,
                                  rowHeight: CGFloat, gap: CGFloat, verticallyCentered: Bool = false) {
-    let paragraph = CardTypography.paragraph()
-    paragraph.lineSpacing = gap
-    let content = NSAttributedString(string: text, attributes: [.font: font, .paragraphStyle: paragraph])
-    let layout = limitedCardText(content, width: rect.width, height: CGFloat.greatestFiniteMagnitude, maxLines: 2)
+    guard !text.isEmpty, rect.width > 0, let cg = NSGraphicsContext.current?.cgContext else { return }
+    let attributes: [NSAttributedString.Key: Any] = [
+        NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName(font.fontName as CFString, font.pointSize, nil),
+    ]
+    let content = NSAttributedString(string: text, attributes: attributes)
+    let typesetter = CTTypesetterCreateWithAttributedString(content as CFAttributedString)
     let source = text as NSString
-    let blockHeight = CGFloat(layout.ranges.count) * rowHeight + CGFloat(max(0, layout.ranges.count - 1)) * gap
+    let suggested = CTTypesetterSuggestClusterBreak(typesetter, 0, Double(rect.width))
+    let firstCount = min(source.length, suggested > 0 ? suggested : source.rangeOfComposedCharacterSequence(at: 0).length)
+    var lines = [source.substring(to: firstCount)]
+    // Deliberately draw exactly two CTLines. The remaining text is passed as one
+    // line to the truncator, so it can never spill into a third visual row.
+    if firstCount < source.length { lines.append(source.substring(from: firstCount)) }
+    let blockHeight = CGFloat(lines.count) * rowHeight + CGFloat(max(0, lines.count - 1)) * gap
     // URL rows start at the top. A short website name stays vertically centered in its paper slip.
     let top = verticallyCentered ? rect.midY + blockHeight / 2 : rect.maxY
-    for (index, range) in layout.ranges.enumerated() {
-        let value = index == 1 && layout.overflows ? source.substring(from: range.location) : source.substring(with: range)
+    cg.saveGState()
+    defer { cg.restoreGState() }
+    cg.clip(to: rect)
+    for (index, value) in lines.enumerated() {
         let lineRect = NSRect(x: rect.minX, y: top - CGFloat(index) * (rowHeight + gap) - rowHeight,
                               width: rect.width, height: rowHeight)
         drawFileLine(value.trimmingCharacters(in: .newlines), font: font, color: color, in: lineRect, topAligned: true)
