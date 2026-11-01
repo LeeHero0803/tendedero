@@ -161,17 +161,21 @@ private func drawWebNote(_ text: String, address: URL, preview: WebPreview?,
                         width: width - pad * 2, height: 40 * unit)
     drawFileLine(text, font: font, color: foreground, in: urlRow)
 
-    let slip = NSRect(x: pad, y: 42 * unit, width: width - pad * 2, height: 114 * unit)
+    // Equal side/bottom insets, with concentric corners matching the paper edge.
+    let slip = NSRect(x: pad, y: pad, width: width - pad * 2, height: 156 * unit - pad)
+    let displayScale = min((Layout.cardWidth - 14) / width, Layout.photoMaxHeight / height)
+    let paperRadius = (Frame.radius - Frame.inset) / max(0.001, displayScale)
+    let slipRadius = max(0, paperRadius - pad)
     let paper = dark ? NSColor(srgbRed: 0.20, green: 0.21, blue: 0.23, alpha: 1)
                      : NSColor(srgbRed: 0.98, green: 0.96, blue: 0.89, alpha: 1)
-    let outline = NSBezierPath(roundedRect: slip, xRadius: 5 * unit, yRadius: 5 * unit)
+    let outline = NSBezierPath(roundedRect: slip, xRadius: slipRadius, yRadius: slipRadius)
     paper.setFill()
     outline.fill()
     foreground.withAlphaComponent(dark ? 0.13 : 0.10).setStroke()
     outline.lineWidth = 0.7 * unit
     outline.stroke()
 
-    let iconBox = NSRect(x: slip.minX + 13 * unit, y: slip.midY - 17 * unit,
+    let iconBox = NSRect(x: slip.minX + 22 * unit, y: slip.midY - 17 * unit,
                          width: 34 * unit, height: 34 * unit)
     if let bytes = preview?.iconData, let icon = NSImage(data: bytes) {
         NSGraphicsContext.saveGraphicsState()
@@ -193,8 +197,6 @@ private func drawWebNote(_ text: String, address: URL, preview: WebPreview?,
 
     let textX = iconBox.maxX + 12 * unit
     let textWidth = slip.maxX - textX - 12 * unit
-    let titleFont = NSFont(name: font.fontName, size: font.pointSize * 0.75) ?? font
-    let summaryFont = NSFont(name: font.fontName, size: font.pointSize * 0.57) ?? font
     let title = preview?.title ?? address.host ?? address.absoluteString
     let summary: String
     if let preview {
@@ -202,39 +204,22 @@ private func drawWebNote(_ text: String, address: URL, preview: WebPreview?,
     } else {
         summary = "正在读取网页信息…"
     }
-    func block(_ value: String, font: NSFont, opacity: CGFloat, rect: NSRect) {
-        let paragraph = CardTypography.paragraph(scale: unit)
-        let attributed = NSAttributedString(string: value, attributes: [
-            .font: font, .foregroundColor: foreground.withAlphaComponent(opacity), .paragraphStyle: paragraph,
-        ])
-        NSGraphicsContext.saveGraphicsState()
-        NSBezierPath(rect: rect).addClip()
-        attributed.draw(with: rect, options: [.usesLineFragmentOrigin, .usesFontLeading, .truncatesLastVisibleLine])
-        NSGraphicsContext.restoreGraphicsState()
-    }
-    block(title, font: titleFont, opacity: 1,
-          rect: NSRect(x: textX, y: slip.maxY - 52 * unit, width: textWidth, height: 42 * unit))
-    block(summary, font: summaryFont, opacity: 0.62,
-          rect: NSRect(x: textX, y: slip.minY + 12 * unit, width: textWidth, height: 36 * unit))
+    let rowHeight = ceil(font.ascender - font.descender + font.leading)
+    let rowGap = 2 * unit
+    drawFileLine(title, font: font, color: foreground,
+                 in: NSRect(x: textX, y: slip.midY + rowGap / 2, width: textWidth, height: rowHeight))
+    drawFileLine(summary, font: font, color: foreground.withAlphaComponent(0.62),
+                 in: NSRect(x: textX, y: slip.midY - rowGap / 2 - rowHeight, width: textWidth, height: rowHeight))
 
-    // One quiet silver paperclip crossing the attachment's upper edge.
-    let x = slip.minX + 18 * unit, y = slip.maxY + 7 * unit
-    let clip = NSBezierPath()
-    clip.move(to: NSPoint(x: x + 7 * unit, y: y - 24 * unit))
-    clip.line(to: NSPoint(x: x + 7 * unit, y: y))
-    clip.curve(to: NSPoint(x: x - 5 * unit, y: y),
-               controlPoint1: NSPoint(x: x + 7 * unit, y: y + 8 * unit),
-               controlPoint2: NSPoint(x: x - 5 * unit, y: y + 8 * unit))
-    clip.line(to: NSPoint(x: x - 5 * unit, y: y - 21 * unit))
-    clip.curve(to: NSPoint(x: x + 2 * unit, y: y - 21 * unit),
-               controlPoint1: NSPoint(x: x - 5 * unit, y: y - 26 * unit),
-               controlPoint2: NSPoint(x: x + 2 * unit, y: y - 26 * unit))
-    clip.line(to: NSPoint(x: x + 2 * unit, y: y - 3 * unit))
-    clip.lineWidth = 1.5 * unit
-    clip.lineCapStyle = .round
-    clip.lineJoinStyle = .round
-    (dark ? NSColor(white: 0.76, alpha: 1) : NSColor(white: 0.48, alpha: 1)).setStroke()
-    clip.stroke()
+    // A small translucent strip straddles the paper attachment's upper edge.
+    let tapeRect = NSRect(x: slip.midX - 24 * unit, y: slip.maxY - 8 * unit,
+                          width: 48 * unit, height: 16 * unit)
+    let tape = NSBezierPath(roundedRect: tapeRect, xRadius: 1.5 * unit, yRadius: 1.5 * unit)
+    NSColor(white: 1, alpha: dark ? 0.12 : 0.30).setFill()
+    tape.fill()
+    NSColor(white: dark ? 1 : 0.45, alpha: dark ? 0.10 : 0.12).setStroke()
+    tape.lineWidth = 0.5 * unit
+    tape.stroke()
 }
 
 /// Draw one line using actual glyph bounds, rather than clipping to nominal
