@@ -73,6 +73,8 @@ final class Line: ObservableObject {
     private let storeKey = "pegged"
     private var darkCards = false
     private var previewRequests: [UUID: QLThumbnailGenerator.Request] = [:]
+    private var webRequests: [UUID: Task<Void, Never>] = [:]
+    private var webPreviews: [URL: WebPreview] = [:]
 
     func updateAppearance(dark: Bool) {
         guard darkCards != dark else { return }
@@ -82,13 +84,17 @@ final class Line: ObservableObject {
 
     private func thumbnail(_ url: URL, reference: Bool, preview: NSImage? = nil) -> NSImage? {
         if reference { return makeFileCard(url, dark: darkCards, preview: preview) }
-        if isNote(url) { return makeNoteCard(url, scale: min(1, CGFloat(Int(320 * Layout.size.scale)) / 1040), dark: darkCards) }
+        if isNote(url) {
+            return makeNoteCard(url, scale: min(1, CGFloat(Int(320 * Layout.size.scale)) / 1040),
+                                dark: darkCards, webPreview: webPreviews[url])
+        }
         return makeThumbnail(url)
     }
 
     init() {
         restore()
         for item in items where item.isFileReference { requestPreview(for: item.id) }
+        for item in items where item.isTextNote { requestWebPreview(for: item.id) }
         scheduleGust()
     }
 
@@ -102,6 +108,7 @@ final class Line: ObservableObject {
         item.flying = flying
         items.append(item)
         if fileReference { requestPreview(for: item.id) }
+        if item.isTextNote { requestWebPreview(for: item.id) }
         scroll = 0
         // A full line lets the oldest photo fall off the far end. Only one: a
         // line hung on a wider screen keeps its length here instead of losing
@@ -127,6 +134,8 @@ final class Line: ObservableObject {
     func drop(_ id: UUID, quietly: Bool = false) {
         guard let i = items.firstIndex(where: { $0.id == id }), !items[i].falling else { return }
         if let request = previewRequests.removeValue(forKey: id) { QLThumbnailGenerator.shared.cancel(request) }
+        webRequests.removeValue(forKey: id)?.cancel()
+        webPreviews[items[i].url] = nil
         onFall?(items[i])
         items[i].falling = true
         hitRects[id] = nil
@@ -321,13 +330,16 @@ final class Line: ObservableObject {
 
     /// After editing, the photo on the line shows the new version.
     func reloadThumbnail(for url: URL) {
-        guard let i = items.firstIndex(where: { $0.url == url && !$0.falling }),
-              let thumb = thumbnail(url, reference: items[i].isFileReference) else { return }
+        guard let i = items.firstIndex(where: { $0.url == url && !$0.falling }) else { return }
+        webRequests.removeValue(forKey: items[i].id)?.cancel()
+        webPreviews[url] = nil
+        guard let thumb = thumbnail(url, reference: items[i].isFileReference) else { return }
         items[i].thumb = thumb
         if items[i].isFileReference {
             items[i].filePreview = nil
             requestPreview(for: items[i].id)
         }
+        if items[i].isTextNote { requestWebPreview(for: items[i].id) }
     }
 
     /// Quick Look on this photo, with the rest of the line a key press away.
@@ -341,6 +353,22 @@ final class Line: ObservableObject {
     func reloadThumbnails() {
         for i in items.indices where !items[i].falling {
             if let thumb = thumbnail(items[i].url, reference: items[i].isFileReference, preview: items[i].filePreview) { items[i].thumb = thumb }
+        }
+    }
+
+    /// Fetch only metadata for notes whose entire content is a web address.
+    private func requestWebPreview(for id: UUID) {
+        guard let item = items.first(where: { $0.id == id && !$0.falling }), item.isTextNote,
+              let text = try? String(contentsOf: item.url, encoding: .utf8),
+              let address = noteWebURL(text) else { return }
+        webRequests.removeValue(forKey: id)?.cancel()
+        webRequests[id] = Task { [weak self] in
+            let result = await WebPreviewLoader.shared.load(address)
+            guard !Task.isCancelled, let self,
+                  let i = self.items.firstIndex(where: { $0.id == id && !$0.falling }) else { return }
+            self.webRequests[id] = nil
+            self.webPreviews[item.url] = result
+            if let thumb = self.thumbnail(item.url, reference: false) { self.items[i].thumb = thumb }
         }
     }
 
