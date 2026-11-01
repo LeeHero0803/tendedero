@@ -178,6 +178,20 @@ final class Line: ObservableObject {
         containsTextNote(text, at: items.filter { !$0.falling && $0.isTextNote }.map(\.url))
     }
 
+    /// Reuse the note and its backing file, making it the newest visible card.
+    @discardableResult
+    func promoteText(_ text: String) -> Bool {
+        guard let index = items.firstIndex(where: {
+            !$0.falling && $0.isTextNote && containsTextNote(text, at: [$0.url])
+        }) else { return false }
+        var item = items.remove(at: index)
+        item.flying = false
+        items.append(item)
+        scroll = 0
+        save()
+        return true
+    }
+
     // MARK: Actions on one photo
 
     func copy(_ id: UUID) {

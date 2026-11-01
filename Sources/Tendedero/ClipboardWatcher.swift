@@ -16,6 +16,9 @@ final class ClipboardWatcher {
     private var timer: Timer?
     private let pasteboard: NSPasteboard
     private let containsText: (String) -> Bool
+    private let onExistingText: (String) -> Void
+    /// The previous observed clipboard payload, including copies made from the line.
+    private var lastText: String?
     private var lastCount: Int
     /// The last image saved. Some apps put the same image on the clipboard
     /// again; it hangs once, unless it has been taken down since.
@@ -69,8 +72,10 @@ final class ClipboardWatcher {
 
     init(onImage: @escaping (URL) -> Void, onFiles: @escaping ([URL]) -> Void,
          containsText: @escaping (String) -> Bool,
+         onExistingText: @escaping (String) -> Void,
          pasteboard: NSPasteboard = .general) {
         self.containsText = containsText
+        self.onExistingText = onExistingText
         self.pasteboard = pasteboard
         self.lastCount = pasteboard.changeCount
         self.onFiles = onFiles
@@ -81,6 +86,7 @@ final class ClipboardWatcher {
         guard timer == nil else { return }
         // Whatever is on the clipboard already is old news.
         lastCount = pasteboard.changeCount
+        lastText = pasteboard.string(forType: .string)
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.check() }
         }
@@ -98,6 +104,8 @@ final class ClipboardWatcher {
         let count = pb.changeCount
         guard count != lastCount else { return }
         lastCount = count
+        let previousText = lastText
+        lastText = pb.string(forType: .string)
         guard let items = pb.pasteboardItems, !items.isEmpty,
               items.allSatisfy({ Self.privateTypes.isDisjoint(with: $0.types) }) else { return }
         // File URLs take precedence over filenames, icons and text representations.
@@ -116,7 +124,7 @@ final class ClipboardWatcher {
               let type = pb.availableType(from: [.png, .tiff]),
               let data = pb.data(forType: type), data.count <= Self.maxBytes,
               pb.changeCount == count else {
-            if Self.textEnabled { checkText(pb, items: items) }
+            if Self.textEnabled { checkText(pb, items: items, previousText: previousText) }
             return
         }
         // Decoding a large image takes a moment, so it happens off the main thread.
@@ -130,15 +138,19 @@ final class ClipboardWatcher {
         }
     }
 
-    private func checkText(_ pb: NSPasteboard, items: [NSPasteboardItem]) {
+    private func checkText(_ pb: NSPasteboard, items: [NSPasteboardItem], previousText: String?) {
         guard items.allSatisfy({ Self.privateTypes.isDisjoint(with: $0.types) }),
               let text = pb.string(forType: .string),
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               text.utf8.count <= Self.maxBytes, pb.changeCount == lastCount else { return }
-        // changeCount records ownership changes, not a user's Copy intent.
-        // Selection helpers may restore the same text without our origin marker.
-        // Check live notes before writing, so neither a card nor an orphan .txt is created.
-        guard !containsText(text), pb.changeCount == lastCount else { return }
+        // Consecutive identical copies stay put. If another payload intervened,
+        // reuse the existing note at the newest position instead of ignoring it.
+        if containsText(text) {
+            guard pb.changeCount == lastCount else { return }
+            if text != previousText { onExistingText(text) }
+            return
+        }
+        guard pb.changeCount == lastCount else { return }
         write(Data(text.utf8), ext: "txt")
     }
 

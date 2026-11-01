@@ -86,6 +86,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.itemsChanged()
         }, containsText: { [weak self] text in
             self?.line.containsText(text) ?? false
+        }, onExistingText: { [weak self] text in
+            guard let self, self.line.promoteText(text) else { return }
+            self.comeDown(on: nil)
+            self.itemsChanged()
         })
         if ClipboardWatcher.isWatching { clipboardWatcher.start() }
 
