@@ -159,12 +159,20 @@ private func drawWebNote(_ text: String, address: URL, preview: WebPreview?,
                          width: CGFloat, height: CGFloat, pad: CGFloat, font: NSFont, dark: Bool) {
     let unit = width / 320
     let foreground = NSColor(white: dark ? 0.92 : 0.13, alpha: 1)
-    let urlRow = NSRect(x: pad, y: height - pad - 40 * unit,
-                        width: width - pad * 2, height: 40 * unit)
-    drawFileLine(text, font: font, color: foreground, in: urlRow)
+    let rowHeight = ceil(font.ascender - font.descender + font.leading)
+    let rowGap = 2 * unit
+    let contentPadding = 16 * unit
+    // File icons start 28 points below the paper edge, plus about 14 points
+    // of transparent icon artwork. Align the URL's visible glyphs to that edge.
+    let topInset = 42 * unit
+    let urlRow = NSRect(x: pad, y: height - topInset - rowHeight,
+                        width: width - pad * 2, height: rowHeight)
+    drawFileLine(text, font: font, color: foreground, in: urlRow, topAligned: true)
 
     // Equal side/bottom insets, with concentric corners matching the paper edge.
-    let slip = NSRect(x: pad, y: pad, width: width - pad * 2, height: 156 * unit - pad)
+    let contentHeight = max(34 * unit, rowHeight * 2 + rowGap)
+    let slip = NSRect(x: pad, y: pad, width: width - pad * 2,
+                      height: contentHeight + contentPadding * 2)
     let displayScale = min((Layout.cardWidth - 14) / width, Layout.photoMaxHeight / height)
     let paperRadius = (Frame.radius - Frame.inset) / max(0.001, displayScale)
     let slipRadius = max(0, paperRadius - pad)
@@ -177,7 +185,7 @@ private func drawWebNote(_ text: String, address: URL, preview: WebPreview?,
     outline.lineWidth = 0.7 * unit
     outline.stroke()
 
-    let iconBox = NSRect(x: slip.minX + 22 * unit, y: slip.midY - 17 * unit,
+    let iconBox = NSRect(x: slip.minX + contentPadding, y: slip.midY - 17 * unit,
                          width: 34 * unit, height: 34 * unit)
     if let bytes = preview?.iconData, let icon = NSImage(data: bytes) {
         NSGraphicsContext.saveGraphicsState()
@@ -197,8 +205,8 @@ private func drawWebNote(_ text: String, address: URL, preview: WebPreview?,
         globe.stroke()
     }
 
-    let textX = iconBox.maxX + 12 * unit
-    let textWidth = slip.maxX - textX - 12 * unit
+    let textX = iconBox.maxX + contentPadding
+    let textWidth = slip.maxX - textX - contentPadding
     let title = preview?.title ?? address.host ?? address.absoluteString
     let summary: String
     if let preview {
@@ -206,8 +214,6 @@ private func drawWebNote(_ text: String, address: URL, preview: WebPreview?,
     } else {
         summary = "正在读取网页信息…"
     }
-    let rowHeight = ceil(font.ascender - font.descender + font.leading)
-    let rowGap = 2 * unit
     drawFileLine(title, font: font, color: foreground,
                  in: NSRect(x: textX, y: slip.midY + rowGap / 2, width: textWidth, height: rowHeight))
     drawFileLine(summary, font: font, color: foreground.withAlphaComponent(0.62),
@@ -227,7 +233,7 @@ private func drawWebNote(_ text: String, address: URL, preview: WebPreview?,
 /// Draw one line using actual glyph bounds, rather than clipping to nominal
 /// font metrics (which can cut off Chinese fallback glyphs and descenders).
 private func drawFileLine(_ text: String, font: NSFont, color: NSColor,
-                          in rect: NSRect, centered: Bool = false) {
+                          in rect: NSRect, centered: Bool = false, topAligned: Bool = false) {
     guard rect.width > 0, rect.height > 0, let cg = NSGraphicsContext.current?.cgContext else { return }
     let attributes: [NSAttributedString.Key: Any] = [
         NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName(font.fontName as CFString, font.pointSize, nil),
@@ -248,6 +254,6 @@ private func drawFileLine(_ text: String, font: NSFont, color: NSColor,
     cg.clip(to: rect)
     cg.textMatrix = .identity
     cg.textPosition = CGPoint(x: centered ? rect.midX - bounds.midX : rect.minX - bounds.minX,
-                              y: rect.midY - bounds.midY)
+                              y: topAligned ? rect.maxY - bounds.maxY : rect.midY - bounds.midY)
     CTLineDraw(line, cg)
 }
