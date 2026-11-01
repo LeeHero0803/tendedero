@@ -177,8 +177,8 @@ extension View {
     }
 }
 
-/// Distinct stationery silhouettes, all inside the original 26-point height
-/// so card attachment, hit testing and flight geometry remain aligned.
+/// A shared 9-by-26-point silhouette, with quiet construction details per type.
+/// Card attachment, hit testing and flight geometry remain aligned.
 struct Clothespin: View {
     enum Kind { case image, text, file }
     var kind: Kind = .image
@@ -189,15 +189,15 @@ struct Clothespin: View {
         case .image:
             colors = [Color(white: 0.70), Color(white: 0.93), Color(white: 0.82), Color(white: 0.62)]
         case .text:
-            colors = [Color(red: 0.70, green: 0.69, blue: 0.66),
-                      Color(red: 0.94, green: 0.93, blue: 0.90),
-                      Color(red: 0.82, green: 0.80, blue: 0.77),
-                      Color(red: 0.63, green: 0.62, blue: 0.59)]
+            colors = [Color(red: 0.72, green: 0.69, blue: 0.63),
+                      Color(red: 0.96, green: 0.94, blue: 0.88),
+                      Color(red: 0.86, green: 0.82, blue: 0.74),
+                      Color(red: 0.64, green: 0.60, blue: 0.53)]
         case .file:
-            colors = [Color(red: 0.67, green: 0.70, blue: 0.73),
-                      Color(red: 0.91, green: 0.94, blue: 0.96),
-                      Color(red: 0.78, green: 0.82, blue: 0.85),
-                      Color(red: 0.59, green: 0.63, blue: 0.66)]
+            colors = [Color(red: 0.64, green: 0.70, blue: 0.76),
+                      Color(red: 0.90, green: 0.95, blue: 0.99),
+                      Color(red: 0.76, green: 0.83, blue: 0.89),
+                      Color(red: 0.57, green: 0.64, blue: 0.71)]
         }
         return LinearGradient(stops: [
             .init(color: colors[0], location: 0),
@@ -214,8 +214,8 @@ struct Clothespin: View {
         Group {
             switch kind {
             case .image: photoPin
-            case .text: binderClip
-            case .file: photoPin
+            case .text: wirePin
+            case .file: roundedEyePin
             }
         }
         .frame(width: 34, height: 26)
@@ -236,27 +236,38 @@ struct Clothespin: View {
             }
     }
 
-    /// A small folded body and one quiet wire loop suggest a binder clip.
-    private var binderClip: some View {
-        ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 1.5)
+    /// G / Wire Pin: the same outer capsule becomes a fine wire loop and tiny jaw.
+    private var wirePin: some View {
+        ZStack(alignment: .bottom) {
+            RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                .strokeBorder(metal, lineWidth: 1.35)
+            Rectangle()
                 .fill(metal)
-                .frame(width: 16, height: 9)
-                .overlay(RoundedRectangle(cornerRadius: 1.5).stroke(edge, lineWidth: 0.5))
-                .offset(x: 9, y: 16)
-            Path { p in
-                p.move(to: CGPoint(x: 13, y: 18))
-                p.addLine(to: CGPoint(x: 12.5, y: 6))
-                p.addQuadCurve(to: CGPoint(x: 14.5, y: 3), control: CGPoint(x: 12, y: 3))
-                p.addLine(to: CGPoint(x: 19.5, y: 3))
-                p.addQuadCurve(to: CGPoint(x: 21.5, y: 6), control: CGPoint(x: 22, y: 3))
-                p.addLine(to: CGPoint(x: 21, y: 18))
-            }
-            .stroke(metal, style: StrokeStyle(lineWidth: 1.3, lineCap: .round, lineJoin: .round))
+                .frame(height: 5.5)
+                .overlay(alignment: .top) {
+                    Rectangle().fill(Color.white.opacity(0.45)).frame(height: 0.5)
+                }
         }
-        .frame(width: 34, height: 26)
+        .frame(width: 9, height: 26)
+        .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+            .strokeBorder(edge, lineWidth: 0.35))
     }
 
+    /// I / Rounded Eye: one small round eye and short slot cut into the same body.
+    private var roundedEyePin: some View {
+        Path { p in
+            p.addPath(RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                .path(in: CGRect(x: 0, y: 0, width: 9, height: 26)))
+            p.addEllipse(in: CGRect(x: 3.2, y: 3.6, width: 2.6, height: 2.6))
+            p.addRoundedRect(in: CGRect(x: 3.8, y: 10.2, width: 1.4, height: 7),
+                             cornerSize: CGSize(width: 0.7, height: 0.7))
+        }
+        .fill(metal, style: FillStyle(eoFill: true))
+        .frame(width: 9, height: 26)
+        .overlay(RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+            .stroke(edge, lineWidth: 0.6))
+    }
 }
 
 extension Pegged {
