@@ -236,28 +236,32 @@ struct Clothespin: View {
             }
     }
 
-    /// A slender double-turn paperclip, with slightly thicker warm metal wire.
+    /// A closed capsule matching the other clips, with a tightly nested inner wire.
     private var paperclipPin: some View {
-        paperclipWire
-            .stroke(metal, style: StrokeStyle(lineWidth: 1.7, lineCap: .round, lineJoin: .round))
-            .overlay(paperclipWire.stroke(Color.white.opacity(0.30),
-                                          style: StrokeStyle(lineWidth: 0.35, lineCap: .round, lineJoin: .round)))
+        ZStack {
+            RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                .strokeBorder(metal, lineWidth: 1.7)
+            paperclipInnerWire
+                .stroke(metal, style: StrokeStyle(lineWidth: 1.7, lineCap: .round, lineJoin: .round))
+                .overlay(paperclipInnerWire.stroke(Color.white.opacity(0.30),
+                                              style: StrokeStyle(lineWidth: 0.35, lineCap: .round, lineJoin: .round)))
+        }
         .frame(width: 9, height: 26)
+        .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+            .strokeBorder(Color.white.opacity(0.30), lineWidth: 0.35))
     }
 
-    private var paperclipWire: Path {
+    private var paperclipInnerWire: Path {
         Path { p in
-            p.move(to: CGPoint(x: 5.8, y: 7))
-            p.addLine(to: CGPoint(x: 5.8, y: 19))
-            p.addCurve(to: CGPoint(x: 3.2, y: 19),
-                       control1: CGPoint(x: 5.8, y: 22.4), control2: CGPoint(x: 3.2, y: 22.4))
-            p.addLine(to: CGPoint(x: 3.2, y: 5))
-            p.addCurve(to: CGPoint(x: 8.15, y: 5),
-                       control1: CGPoint(x: 3.2, y: -0.533), control2: CGPoint(x: 8.15, y: -0.533))
-            p.addLine(to: CGPoint(x: 8.15, y: 21))
-            p.addCurve(to: CGPoint(x: 0.85, y: 21),
-                       control1: CGPoint(x: 8.15, y: 26.533), control2: CGPoint(x: 0.85, y: 26.533))
-            p.addLine(to: CGPoint(x: 0.85, y: 6.5))
+            // The free end reaches into the upper arcs instead of stopping halfway down.
+            p.move(to: CGPoint(x: 3.3, y: 3.4))
+            p.addLine(to: CGPoint(x: 3.3, y: 20.7))
+            p.addCurve(to: CGPoint(x: 5.7, y: 20.7),
+                       control1: CGPoint(x: 3.3, y: 23.4), control2: CGPoint(x: 5.7, y: 23.4))
+            p.addLine(to: CGPoint(x: 5.7, y: 4.7))
+            p.addCurve(to: CGPoint(x: 7.85, y: 3.6),
+                       control1: CGPoint(x: 5.7, y: 2.9), control2: CGPoint(x: 7, y: 2.9))
         }
     }
 
