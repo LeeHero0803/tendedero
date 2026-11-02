@@ -45,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var wanted = false
     /// Set when you open the line on purpose, so it stays up while empty.
     private var keepOpen = false
+    /// Deliberate hover/shortcut activation is allowed over a full-screen app.
+    private var manualReveal = false
 
     // What brings the line down, from the menu bar's "Bring the line down".
     // Out of the box, the first two are on and the third off.
@@ -57,9 +59,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Restrict only hover activation; the open line remains fully interactive.
-    static var hoverFromTopLeftOnly: Bool {
-        get { UserDefaults.standard.bool(forKey: "hoverFromTopLeftOnly") }
-        set { UserDefaults.standard.set(newValue, forKey: "hoverFromTopLeftOnly") }
+    enum HoverTriggerArea: String { case menuBar, topLeft, topCenter }
+    static var hoverTriggerArea: HoverTriggerArea {
+        get {
+            if let value = UserDefaults.standard.string(forKey: "hoverTriggerArea"),
+               let area = HoverTriggerArea(rawValue: value) { return area }
+            return UserDefaults.standard.bool(forKey: "hoverFromTopLeftOnly") ? .topLeft : .menuBar
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "hoverTriggerArea") }
     }
 
     /// Something new hanging shows itself for a moment. Off, it hangs
@@ -388,7 +395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func refresh() {
         let blocked = panel.screen.map(FullScreen.blocksLine(on:))
             ?? LinePanel.screenUnderPointer().map(FullScreen.blocksLine(on:)) ?? false
-        if wanted && !blocked {
+        if wanted && (!blocked || manualReveal) {
             present()
         } else {
             dismiss()
@@ -402,7 +409,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         isPresent = true
         panel.alphaValue = 1
         // The window itself only comes in while the line is down; see setRevealed.
-        if isRevealed { panel.orderFrontRegardless() }
+        if isRevealed { panel.showOnCurrentSpace() }
     }
 
     private func dismiss() {
@@ -426,7 +433,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func setRevealed(_ on: Bool) {
         guard on != isRevealed else {
             // Logical visibility can outlive actual ordering during a Space switch.
-            if on && isPresent { panel.orderFrontRegardless() }
+            if on && isPresent { panel.showOnCurrentSpace() }
             return
         }
         isRevealed = on
@@ -437,7 +444,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // over the top of the screen would still sit above other apps for
         // anything that checks what is on top, like screen automation.
         if on {
-            if isPresent { panel.orderFrontRegardless() }
+            if isPresent { panel.showOnCurrentSpace() }
         } else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                 guard let self, !self.isRevealed else { return }
@@ -445,6 +452,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         if !on {
+            manualReveal = false
             pinned = false
             peekUntil = .distantPast
             panel.ignoresMouseEvents = true
@@ -452,7 +460,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggle() {
-        if isRevealed {
+        if isRevealed && panel.isVisible && panel.isOnActiveSpace {
             setRevealed(false)
             if line.liveCount == 0 {
                 keepOpen = false
@@ -460,6 +468,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 refresh()
             }
         } else {
+            setRevealed(false)
+            manualReveal = true
             keepOpen = true
             wanted = true
             panel.placeOnScreen()
@@ -501,7 +511,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// AppKit screen coordinates also support displays left of/above the main one.
     static func hoverTriggerBand(of screen: NSScreen) -> NSRect {
         var band = menuBarBand(of: screen)
-        if hoverFromTopLeftOnly { band.size.width = min(48, band.width) }
+        switch hoverTriggerArea {
+        case .menuBar: break
+        case .topLeft: band.size.width = min(48, band.width)
+        case .topCenter:
+            var width: CGFloat = 96
+            if let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea {
+                width = max(width, right.minX - left.maxX)
+            }
+            band.size.width = min(width, screen.frame.width)
+            band.origin.x = screen.frame.midX - band.width / 2
+        }
         return band
     }
 
@@ -550,8 +570,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // Resting in the menu bar brings the line down on that screen.
             // Pushing against the top edge is part of it, and it also works
             // when another display sits above and the pointer never stops.
-            if Self.opensFromMenuBar, let screen = screenUnderPointer, inHoverTrigger, !menuBarSuppressed,
-               !FullScreen.blocksLine(on: screen) {
+            if Self.opensFromMenuBar, let screen = screenUnderPointer, inHoverTrigger, !menuBarSuppressed {
                 let since = hotZoneSince ?? now
                 hotZoneSince = since
                 if now.timeIntervalSince(since) >= Self.revealDelay {
@@ -560,6 +579,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     // menu-bar/visible frame. Always place for this reveal.
                     panel.placeOnScreen(screen)
                     updateCapacity()
+                    manualReveal = true
                     refresh()
                     reveal()
                 }
@@ -758,12 +778,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         options.addItem(hover)
         let triggerArea = NSMenuItem(title: L("Hover trigger area"), action: nil, keyEquivalent: "")
         let areas = NSMenu()
-        for (title, cornerOnly) in [("Entire menu bar", false), ("Top-left corner only", true)] {
+        let areaChoices: [(String, HoverTriggerArea)] = [
+            ("Entire menu bar", .menuBar), ("Top-left corner only", .topLeft), ("Top center only", .topCenter)
+        ]
+        for (title, area) in areaChoices {
             let choice = ClosureMenuItem(L(title)) { [weak self] in
-                Self.hoverFromTopLeftOnly = cornerOnly
+                Self.hoverTriggerArea = area
                 self?.hotZoneSince = nil
             }
-            choice.state = Self.hoverFromTopLeftOnly == cornerOnly ? .on : .off
+            choice.state = Self.hoverTriggerArea == area ? .on : .off
             areas.addItem(choice)
         }
         triggerArea.submenu = areas
@@ -773,7 +796,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         peek.state = Self.peeksAtNew ? .on : .off
         options.addItem(peek)
-        let fullScreen = ClosureMenuItem(L("Over full screen apps")) { [weak self] in
+        let fullScreen = ClosureMenuItem(L("Automatically reveal over full screen apps")) { [weak self] in
             FullScreen.showLineOver.toggle()
             self?.refresh()
         }

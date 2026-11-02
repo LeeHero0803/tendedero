@@ -10,7 +10,7 @@ final class LinePanel: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
-        level = .floating
+        level = .statusBar
         // Every Space, full screen ones included. Whether the line comes down
         // over a full screen app is up to the user, see FullScreen.showLineOver.
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
@@ -34,6 +34,16 @@ final class LinePanel: NSPanel {
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    /// Re-order a nonactivating auxiliary panel without switching the user's Space.
+    func showOnCurrentSpace() {
+        level = .statusBar
+        if !isOnActiveSpace {
+            orderOut(nil)
+            collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        }
+        orderFrontRegardless()
+    }
 
     /// The line hangs on the screen you are using, which is the one with the
     /// pointer: that is where you just took the screenshot.

@@ -259,9 +259,7 @@ struct Clothespin: View {
             p.addLine(to: CGPoint(x: 3.3, y: 20.7))
             p.addCurve(to: CGPoint(x: 5.7, y: 20.7),
                        control1: CGPoint(x: 3.3, y: 23.4), control2: CGPoint(x: 5.7, y: 23.4))
-            p.addLine(to: CGPoint(x: 5.7, y: 4.7))
-            p.addCurve(to: CGPoint(x: 7.85, y: 3.6),
-                       control1: CGPoint(x: 5.7, y: 2.9), control2: CGPoint(x: 7, y: 2.9))
+            p.addLine(to: CGPoint(x: 5.7, y: 3.4))
         }
     }
 
